@@ -1,0 +1,37 @@
+{
+    "info":{
+        "name":"program name",
+        "authors":[
+            { "name":"foo bar!", "link":"github.com/polyllc"},
+            { "name":"bar foo?", "link":"github.com/notpolyllc"}
+        ],
+        "description":"the best foo bar out there",
+        "img":"link.png"
+        "
+    },
+    "compile":{
+        "method":"custom",
+        "commands":[
+            { "cmd":"command here" },
+            { "cmd":"command here" }
+        ],
+        "mainFile":"mainfile.cpp",
+        "makeFile":"makefile",
+        "gradleFile":"thing.gradle",
+        "mavenFile":"thing.maven",
+        "vsSolution":"thing.sln",
+    },
+    "run":{
+        "type":"executable",
+        "executables":[
+            { "executable":"main.exe", "type":"main" },
+            { "executable":"setup.exe", "type":"setup" }
+        ],
+
+        "type":"command",
+        "commands":[
+            { "command":"scrypty", "type":"main" },
+            { "command":"scrypty list", "type":"command", "description":"list the scrypty's installed"}
+        ]
+    }
+}
