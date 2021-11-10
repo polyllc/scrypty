@@ -3,7 +3,8 @@ const fs = require("fs");
 const request = require("request");
 const { exec } = require("child_process");
 const unzipper = require("unzipper");
-const findit = require('findit');
+const os = require("os");
+var prompt = require("prompt-sync")();
 
 function getProgramNameFromURL(url){
 
@@ -84,8 +85,8 @@ function compile(programName){
     //compiling
 
     //methods
-    //singleg++  compile only one file, c++
-    //singlegcc  compile only one file, c
+    //singleg++  compile only one file, c++ with g++
+    //singlegcc  compile only one file, c with gcc
     //make       compile by make
     //cmake      compile by cmake
     //vs         compile by visual studio
@@ -97,7 +98,7 @@ function compile(programName){
     //npm        compile by npm (either by npm install in wdir or asking the user if they know that the package is available on npm already)
     //nmakevs    compile by visual studio's nmake
     //custom     compile by custom commands defined in the scrypty file (maybe one day there'll be a scrypty server with scrypty files?)
-    //autocustom compile by instructions found in readme
+    //autocustom compile by instructions found in readme (if all else fails!)
 
 
     //ways to find out how to compile
@@ -111,8 +112,10 @@ function compile(programName){
     // ----- ok the obvious ones end here, down below are just (very educated) guesses that would make sense! -----
     //check if there are multiple files, find the one with file names that would make sense
     // like: main.cpp, {programname}.cpp, index.cpp, stuff like that
-    //if there are multiple files, find the most popular extension (not always working)
+    //if there are multiple files, find the most popular extension (doesn't always work, ex: electron)
     //read the readme for compile instructions, use keywords such as `` (code blocks), the current running os, something like building, # building, or something like that
+    //find folder with scripts for install.sh or build.sh or something with that (confirm with user!)
+    //find install.sh or build.sh (confirm with user!)
 
 
 
@@ -121,18 +124,28 @@ function compile(programName){
     var methods = []; //the methods of compilation, the earlier in the array, the better method of compilation, we still ask the user, but inform them which one is the better option
 
     var scryptyFile = "none";
+    var scrypty;
 
     var folder = __dirname + "\\" + programName;
 
     var files = fs.readdirSync(folder);
     if(findIfScrypty(files)){
         scryptyFile = folder + "\\" + files.find((element) => { return element.endsWith(".scrypty");} );
-        if(!verifyScrypty(scryptyFile)){
-            console.log("Found scrypty file! But it doesn't seem to be formatted correctly :(. Trying other ways to compile...");
+        if(verifyScrypty(scryptyFile) != 2){
+            scrypty = parseScrypty(scryptyFile);
+            methods.push(getMethod(scrypty)); //we always listen to scrypty file!
+            console.log(methods);
+            console.log("Found Scrypty file!");
         }
         else{
-            methods.push(parseScrypty(scryptyFile)['compile']['method']); //we always listen to scrypty file!
-            console.log("Found Scrypty file!");
+            console.log("The repository was still cloned into: " + folder);
+            return;
+        }
+    }
+    else{
+        if(os.hostname() == ("freebsd" || "aix" || "openbsd" || "android" || "sunos")){ //honestly no idea how I'm going to test this, well other than install each os in a vm
+            console.error("Sorry! But scrypty doesn't support freebsd, aix, sunos, openbsd or android. Since there wasn't a scrypty file in this repository, you can't compile this using scrypty. The repository was still cloned into: " + folder);
+            return;
         }
     }
 
@@ -140,13 +153,13 @@ function compile(programName){
         switch(methods[0]){
             case "singleg++": 
             if(scryptyFile != "none"){
-                compileSingleGPP(folder, parseScrypty(scryptyFile)['compile']['mainFile']); break;
+                compileSingleGPP(folder, getScryptyOS(scrypty).mainFile); break;
             }
             else {
                 break;
             }
             case "custom":
-                compileCustom(folder, scryptyFile);
+                compileCustom(folder, scrypty);
         }
     }
     else if(methods.length > 1){
@@ -158,9 +171,7 @@ function compile(programName){
     }
     
     console.log("Repository installed! Program is found in: " + folder + ". Run this program with `scrypty run " + programName + "`");
-    //stuff to find
-    //find folder with scripts for install.sh or build.sh or something with that (confirm with user!)
-    //find install.sh or build.sh (confirm with user!)
+    //rl.close();
 
 }
 
@@ -182,14 +193,41 @@ function compileSingleGPP(folder, file){
 }
 
 
-function compileCustom(folder, scrypty){
-    scrypty = parseScrypty(scrypty);
-    var len = scrypty['compile']['commands'].length;
+async function compileCustom(folder, scrypty){
+
+
+    console.log("The scrypty file has set the compilation method to custom, which means custom commands are being executed. Make sure you trust the source before you continue.");
+
+
+
+    var r = "";
+
+    while(r != ("y" || "n")){
+        r = prompt("Y (Continue) | N (Don't continue) | C (Check commands)");
+        r = r.toLowerCase();
+        switch(r){
+            case "y":
+                console.log("Continuing..."); break;
+            case "n":
+                console.log("Not continuing...");
+                return 1;
+            case "c":
+                for(var i = 0; i < getScryptyCommands(scrypty).length; i++){
+                    console.log(getScryptyCommands(scrypty)[i].cmd);
+                }
+                break;
+
+            default: console.log("Not a valid option"); break;
+        }
+    }
+    
+
+    var len = getScryptyCommands(scrypty).length;
     var i = 0;
     console.log("running custom commands...");
     while(len > i){
-        cmd = scrypty['compile']['commands'][i]['cmd'];
-        console.log("command #" + i+1 + ": " + cmd);
+        cmd = getScryptyCommands(scrypty)[i].cmd;
+        console.log("command #" + (i+1) + ": " + cmd);
         exec(cmd, (error, stdout, stderr) => {
             if (error) {
                 console.log(`error: ${error.message}`);
@@ -206,9 +244,161 @@ function compileCustom(folder, scrypty){
 }
 
 
+function getMethod(scrypty){
+    switch(os.platform()){
+        case "win32":  if(scrypty.compile.win != undefined){ return scrypty.compile.win.method; } break;
+        case "darwin":  if(scrypty.compile.mac != undefined){ return scrypty.compile.mac.method; } break;
+        case "linux":  if(scrypty.compile.linux != undefined){ return scrypty.compile.linux.method; } break;
+        case "aix":  if(scrypty.compile.aix != undefined){ return scrypty.compile.aix.method; } break;
+        case "freebsd":  if(scrypty.compile.freebsd != undefined){ return scrypty.compile.freebsd.method; } break;
+        case "openbsd":  if(scrypty.compile.openbsd != undefined){ return scrypty.compile.openbsd.method; } break;
+        case "sunos":  if(scrypty.compile.sunos != undefined){ return scrypty.compile.sunos.method; } break;
+        case "android":  if(scrypty.compile.android != undefined){ return scrypty.compile.android.method; } break; 
+    }
+    if(scrypty.compile.all != undefined){
+        return scrypty.compile.all.method; //we've already verified at this point that there are in fact commands when the method is custom
+    }
+}
 
-function verifyScrypty(scryptyFile){
-    return true;
+function getScryptyCommands(scrypty){
+    switch(os.platform()){
+        case "win32":  if(scrypty.compile.win != undefined){ return scrypty.compile.win.commands; } break;
+        case "darwin":  if(scrypty.compile.mac != undefined){ return scrypty.compile.mac.commands; } break;
+        case "linux":  if(scrypty.compile.linux != undefined){ return scrypty.compile.linux.commands; } break;
+        case "aix":  if(scrypty.compile.aix != undefined){ return scrypty.compile.aix.commands; } break;
+        case "freebsd":  if(scrypty.compile.freebsd != undefined){ return scrypty.compile.freebsd.commands; } break;
+        case "openbsd":  if(scrypty.compile.openbsd != undefined){ return scrypty.compile.openbsd.commands; } break;
+        case "sunos":  if(scrypty.compile.sunos != undefined){ return scrypty.compile.sunos.commands; } break;
+        case "android":  if(scrypty.compile.android != undefined){ return scrypty.compile.android.commands; } break;
+    }
+    if(scrypty.compile.all != undefined){
+        return scrypty.compile.all.commands; //we've already verified at this point that there are in fact commands when the method is custom
+    }
+}
+
+function getScryptyOS(scrypty){
+    switch(os.platform()){
+        case "win32":  if(scrypty.compile.win != undefined){ return scrypty.compile.win; } break;
+        case "darwin":  if(scrypty.compile.mac != undefined){ return scrypty.compile.mac; } break;
+        case "linux":  if(scrypty.compile.linux != undefined){ return scrypty.compile.linux; } break;
+        case "aix":  if(scrypty.compile.aix != undefined){ return scrypty.compile.aix; } break;
+        case "freebsd":  if(scrypty.compile.freebsd != undefined){ return scrypty.compile.freebsd; } break;
+        case "openbsd":  if(scrypty.compile.openbsd != undefined){ return scrypty.compile.openbsd; } break;
+        case "sunos":  if(scrypty.compile.sunos != undefined){ return scrypty.compile.sunos; } break;
+        case "android":  if(scrypty.compile.android != undefined){ return scrypty.compile.android; } break;
+    }
+    if(scrypty.compile.all != undefined){
+        return scrypty.compile.all; //we've already verified at this point that there are in fact commands when the method is custom
+    }
+}
+
+
+function verifyScrypty(scryptyFile){ //so much verifying to do!
+    
+    var scrypty = parseScrypty(scryptyFile);
+
+    var info = scrypty.info; //not important for compilation or anything really, it just serves as a place to hold info, important when compiling by a scrypty file though
+
+
+    //return codes:
+    //0 everything is good to go!
+    //1 continue to compile with other methods, scrypty file is not formatted correctly or portions are missing
+    //2 unsupported os that doesn't have scrypty instructions on how to compile
+
+    var compile = scrypty.compile;
+    if(scrypty.compile === undefined){
+        console.error("Uh oh, the compile portion of the scrypty file is missing! Cannot use this scrypty to compile...");
+        return 1;
+    }
+    if(scrypty.compile.all === undefined){
+        switch(os.platform()){
+            case "win32":
+                if(scrypty.compile.win === undefined){
+                    console.error("Uh oh, the scrypty file doesn't have any compilation instructions for windows, but there still might be a way to compile it, so continuing...");
+                    return 1;
+                }
+                break;
+            case "darwin":
+                if(scrypty.compile.mac === undefined){
+                    console.error("Uh oh, the scrypty file doesn't have any compilation instructions for macOS, but there still might be a way to compile it, so continuing...");
+                    return 1;
+                }
+                break;
+            case "linux":
+                if(scrypty.compile.linux === undefined){
+                    console.error("Uh oh, the scrypty file doesn't have any compilation instructions for linux, but there still might be a way to compile it, so continuing...");
+                    return 1;
+                }
+                break;
+            case "aix":
+                if(scrypty.compile.aix === undefined){
+                    console.error("Uh oh, the scrypty file doesn't have any compilation instructions for AIX. Scrypty does not officially support AIX, so it will not continue.");
+                    return 2;
+                }
+                break;
+            case "freebsd":
+                if(scrypty.compile.freebsd === undefined){
+                    console.error("Uh oh, the scrypty file doesn't have any compilation instructions for FreeBSD. Scrypty does not officially support FreeBSD, so it will not continue.");
+                    return 2;
+                }
+                break;
+            case "openbsd":
+                if(scrypty.compile.openbsd === undefined){
+                    console.error("Uh oh, the scrypty file doesn't have any compilation instructions for OpenBSD. Scrypty does not officially support OpenBSD, so it will not continue.");
+                    return 2;
+                }
+                break;
+            case "sunos":
+                if(scrypty.compile.sunos === undefined){
+                    console.error("Uh oh, the scrypty file doesn't have any compilation instructions for SunOS. Scrypty does not officially support SunOS, so it will not continue.");
+                    return 2;
+                }
+                break;
+            case "android":
+                if(scrypty.compile.android === undefined){
+                    console.error("Uh oh, the scrypty file doesn't have any compilation instructions for Android. Scrypty does not officially support Android, so it will not continue.");
+                    return 2;
+                }
+                break;     
+        }
+    }
+    
+
+    var numOS = 0; //we need to check to make sure there's at least on compile instruction per scrypty file
+
+    for(var i = 0; i < 9; i++){ //since I don't want to repeat the same code for all 3 os's, we just loop through them
+        var currentOS;
+        var currentOSStr;
+
+        switch(i){ 
+            case 0: currentOS = scrypty.compile.win; currentOSStr = "win32"; break;
+            case 1: currentOS = scrypty.compile.mac; currentOSStr = "darwin"; break;
+            case 2: currentOS = scrypty.compile.linux; currentOSStr = "linux"; break;
+            case 3: currentOS = scrypty.compile.freebsd; currentOSStr = "freebsd"; break;
+            case 4: currentOS = scrypty.compile.openbsd; currentOSStr = "openbsd"; break;
+            case 5: currentOS = scrypty.compile.sunos; currentOSStr = "sunos"; break;
+            case 6: currentOS = scrypty.compile.android; currentOSStr = "android"; break;
+            case 7: currentOS = scrypty.compile.aix; currentOSStr = "aix"; break;  
+            case 8: currentOS = scrypty.compile.all; currentOSStr = "all"; break; //all is to be used as a last resort, as we prefer os specific instructions
+        }
+        if(currentOS != undefined && (currentOSStr == "all" || currentOSStr == os.hostname())){
+            numOS++;
+            if(currentOS.method === undefined){
+                console.error("Uh oh, no method of compilation was provided! But there still might be a way to compile it, so continuing...");
+                return 1;
+            }
+            if((currentOS.method == ("singleg++" || "singlegcc")) && currentOS.mainFile === undefined){
+                console.error("Uh oh, the method was provided to be " + currentOS.method + ", but no main file was provided to compile! But there still might be a way to compile it, so continuing...");
+                return 1;
+            }
+        }
+
+    }
+
+    if(numOS == 0){
+        console.error("Uh oh, the scrypty has no compilation instructions for your OS at all! But there still might be a way to compile, so contining...");
+    }
+
 }
 
 function findIfScrypty(files, programType, folder) {
@@ -219,7 +409,7 @@ function findIfScrypty(files, programType, folder) {
 }
 
 function parseScrypty(file){
-    return JSON.parse(fs.readFileSync(file).toString());
+    return JSON.parse(fs.readFileSync(file).toString()); //its literally just a json.parse, but saying parseScrypty sounds so much better :)
 }
 
 function findWorkingDir(programName){
@@ -269,7 +459,8 @@ function getFile(url){
 }
 
 
-download("https://github.com/polyllc/jump-cutter-revamped.git");
+//download("https://github.com/yarnpkg/yarn");
+compile("jump-cutter-revamped");
 
 
 
@@ -281,6 +472,8 @@ async function gitDownload(url, programName){
         //  console.error(err); it just keeps saying that we've already made this directory so lets just comment this out for now
         return;
     });
+
+    console.log("Cloning into " + folder + "...");
 
     exec("git clone " + url + " " + folder, (error, stdout, stderr) => {
         if (error) {

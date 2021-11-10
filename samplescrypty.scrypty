@@ -6,26 +6,38 @@
             { "name":"bar foo?", "link":"github.com/notpolyllc"}
         ],
         "description":"the best foo bar out there",
-        "img":"link.png"
-        "
+        "img":"link.png",
+        "link":"https://github.com/polyllc/scrypty",
+        "postCompile":"insert message here"
     },
     "compile":{
-        "method":"custom",
-        "commands":[
-            { "cmd":"command here" },
-            { "cmd":"command here" }
-        ],
-        "mainFile":"mainfile.cpp",
-        "makeFile":"makefile",
-        "gradleFile":"thing.gradle",
-        "mavenFile":"thing.maven",
-        "vsSolution":"thing.sln",
+            "all":{
+                "method":"custom",
+                "commands":[
+                    { "cmd":"command here" },
+                    { "cmd":"command here" }
+                ],
+                "mainFile":"mainfile.cpp",
+                "makeFile":"makefile",
+                "gradleFile":"thing.gradle",
+                "mavenFile":"thing.maven",
+                "vsSolution":"thing.sln",
+                "nmakeFile":"thing.nmake"
+            },
+            "win":{
+                "method":"vs",
+                "vsSolution":"solution.sln"
+            },
+            "mac":{
+                "method":"make",
+                "makeFile":"makefile"
+            }
     },
     "run":{
         "type":"executable",
         "executables":[
-            { "executable":"main.exe", "type":"main" },
-            { "executable":"setup.exe", "type":"setup" }
+            { "executable":"main.exe", "type":"main", "description":"main executable" },
+            { "executable":"setup.exe", "type":"setup", "description":"first time setup" }
         ],
 
         "type":"command",
