@@ -6,6 +6,41 @@ const unzipper = require("unzipper");
 const os = require("os");
 var prompt = require("prompt-sync")();
 
+
+
+//color defines
+
+const _black = "\x1b[30m";
+const _red = "\x1b[31m";
+const _green = "\x1b[32m";
+const _yellow = "\x1b[33m";
+const _blue = "\x1b[34m";
+const _magenta = "\x1b[35m";
+const _cyan = "\x1b[36m";
+const _white = "\x1b[37m";
+
+const _bgBlack = "\x1b[40m"
+const _bgRed = "\x1b[41m"
+const _bgGreen = "\x1b[42m"
+const _bgYellow = "\x1b[43m"
+const _bgBlue = "\x1b[44m"
+const _bgMagenta = "\x1b[45m"
+const _bgCyan = "\x1b[46m"
+const _bgWhite = "\x1b[47m"
+
+const _reset = "\x1b[0m"
+const _bright = "\x1b[1m"
+const _dim = "\x1b[2m"
+const _underscore = "\x1b[4m"
+const _blink = "\x1b[5m"
+const _reverse = "\x1b[7m"
+const _hidden = "\x1b[8m"
+
+function colorText(color, str){
+    return color + str + _reset;
+}
+
+
 function getProgramNameFromURL(url){
 
     //say url is https://github.com/polyllc/scrypty.git, we only want the scrypty part for the file folder
@@ -130,12 +165,11 @@ function compile(programName){
 
     var files = fs.readdirSync(folder);
     if(findIfScrypty(files)){
+        console.log("Found Scrypty file!");
         scryptyFile = folder + "\\" + files.find((element) => { return element.endsWith(".scrypty");} );
         if(verifyScrypty(scryptyFile) != 2){
             scrypty = parseScrypty(scryptyFile);
             methods.push(getMethod(scrypty)); //we always listen to scrypty file!
-            console.log(methods);
-            console.log("Found Scrypty file!");
         }
         else{
             console.log("The repository was still cloned into: " + folder);
@@ -207,17 +241,18 @@ async function compileCustom(folder, scrypty){
         r = r.toLowerCase();
         switch(r){
             case "y":
-                console.log("Continuing..."); break;
+                console.log(colorText(_green, "Continuing...")); break;
             case "n":
-                console.log("Not continuing...");
+                console.log(colorText(_red, "Not continuing... trying to find other ways to compile"));
                 return 1;
             case "c":
+                console.log("Commands:");
                 for(var i = 0; i < getScryptyCommands(scrypty).length; i++){
                     console.log(getScryptyCommands(scrypty)[i].cmd);
                 }
                 break;
 
-            default: console.log("Not a valid option"); break;
+            default: console.log(colorText(_yellow, "Not a valid option")); break;
         }
     }
     
@@ -276,7 +311,7 @@ function getScryptyCommands(scrypty){
     }
 }
 
-function getScryptyOS(scrypty){
+function getScryptyOS(scrypty){ //gets the compile data from scrypty file by os
     switch(os.platform()){
         case "win32":  if(scrypty.compile.win != undefined){ return scrypty.compile.win; } break;
         case "darwin":  if(scrypty.compile.mac != undefined){ return scrypty.compile.mac; } break;
@@ -307,56 +342,56 @@ function verifyScrypty(scryptyFile){ //so much verifying to do!
 
     var compile = scrypty.compile;
     if(scrypty.compile === undefined){
-        console.error("Uh oh, the compile portion of the scrypty file is missing! Cannot use this scrypty to compile...");
+        console.error("\x1b[31m%s\x1b[0m", "Uh oh, the compile portion of the scrypty file is missing! Cannot use this scrypty to compile...");
         return 1;
     }
     if(scrypty.compile.all === undefined){
         switch(os.platform()){
             case "win32":
                 if(scrypty.compile.win === undefined){
-                    console.error("Uh oh, the scrypty file doesn't have any compilation instructions for windows, but there still might be a way to compile it, so continuing...");
+                    console.error(colorText(_yellow, "Uh oh, the scrypty file doesn't have any compilation instructions for windows, but there still might be a way to compile it, so continuing..."));
                     return 1;
                 }
                 break;
             case "darwin":
                 if(scrypty.compile.mac === undefined){
-                    console.error("Uh oh, the scrypty file doesn't have any compilation instructions for macOS, but there still might be a way to compile it, so continuing...");
+                    console.error(colorText(_yellow, "Uh oh, the scrypty file doesn't have any compilation instructions for macOS, but there still might be a way to compile it, so continuing..."));
                     return 1;
                 }
                 break;
             case "linux":
                 if(scrypty.compile.linux === undefined){
-                    console.error("Uh oh, the scrypty file doesn't have any compilation instructions for linux, but there still might be a way to compile it, so continuing...");
+                    console.error(colorText(_yellow, "Uh oh, the scrypty file doesn't have any compilation instructions for linux, but there still might be a way to compile it, so continuing..."));
                     return 1;
                 }
                 break;
             case "aix":
                 if(scrypty.compile.aix === undefined){
-                    console.error("Uh oh, the scrypty file doesn't have any compilation instructions for AIX. Scrypty does not officially support AIX, so it will not continue.");
+                    console.error(colorText(_red, "Uh oh, the scrypty file doesn't have any compilation instructions for AIX. Scrypty does not officially support AIX, so it will not continue."));
                     return 2;
                 }
                 break;
             case "freebsd":
                 if(scrypty.compile.freebsd === undefined){
-                    console.error("Uh oh, the scrypty file doesn't have any compilation instructions for FreeBSD. Scrypty does not officially support FreeBSD, so it will not continue.");
+                    console.error(colorText(_red, "Uh oh, the scrypty file doesn't have any compilation instructions for FreeBSD. Scrypty does not officially support FreeBSD, so it will not continue."));
                     return 2;
                 }
                 break;
             case "openbsd":
                 if(scrypty.compile.openbsd === undefined){
-                    console.error("Uh oh, the scrypty file doesn't have any compilation instructions for OpenBSD. Scrypty does not officially support OpenBSD, so it will not continue.");
+                    console.error(colorText(_red, "Uh oh, the scrypty file doesn't have any compilation instructions for OpenBSD. Scrypty does not officially support OpenBSD, so it will not continue."));
                     return 2;
                 }
                 break;
             case "sunos":
                 if(scrypty.compile.sunos === undefined){
-                    console.error("Uh oh, the scrypty file doesn't have any compilation instructions for SunOS. Scrypty does not officially support SunOS, so it will not continue.");
+                    console.error(colorText(_red, "Uh oh, the scrypty file doesn't have any compilation instructions for SunOS. Scrypty does not officially support SunOS, so it will not continue."));
                     return 2;
                 }
                 break;
             case "android":
                 if(scrypty.compile.android === undefined){
-                    console.error("Uh oh, the scrypty file doesn't have any compilation instructions for Android. Scrypty does not officially support Android, so it will not continue.");
+                    console.error(colorText(_red, "Uh oh, the scrypty file doesn't have any compilation instructions for Android. Scrypty does not officially support Android, so it will not continue."));
                     return 2;
                 }
                 break;     
@@ -381,27 +416,49 @@ function verifyScrypty(scryptyFile){ //so much verifying to do!
             case 7: currentOS = scrypty.compile.aix; currentOSStr = "aix"; break;  
             case 8: currentOS = scrypty.compile.all; currentOSStr = "all"; break; //all is to be used as a last resort, as we prefer os specific instructions
         }
-        if(currentOS != undefined && (currentOSStr == "all" || currentOSStr == os.hostname())){
-            numOS++;
+        if(currentOS != undefined && currentOSStr == "all" || currentOS != undefined && currentOSStr == os.platform()){
             if(currentOS.method === undefined){
-                console.error("Uh oh, no method of compilation was provided! But there still might be a way to compile it, so continuing...");
-                return 1;
+                console.error(colorText(_cyan, "For OS: " + currentOSStr) + colorText(_yellow, " Uh oh, no method of compilation was provided! But there still might be a way to compile it, so continuing..."));
             }
-            if((currentOS.method == ("singleg++" || "singlegcc")) && currentOS.mainFile === undefined){
-                console.error("Uh oh, the method was provided to be " + currentOS.method + ", but no main file was provided to compile! But there still might be a way to compile it, so continuing...");
-                return 1;
+            else if(currentOS.method == "singleg++" && currentOS.mainFile === undefined || currentOS.method == "singlegcc"  && currentOS.mainFile === undefined){
+                console.error(colorText(_cyan, "For OS: " + currentOSStr) + colorText(_yellow, " Uh oh, the method was provided to be " + currentOS.method + ", but no main file was provided to compile! But there still might be a way to compile it, so continuing..."));
+            }
+            else if(currentOS.method == "make" && currentOS.makeFile === undefined){
+                console.error(colorText(_cyan, "For OS: " + currentOSStr) + colorText(_yellow, " Uh oh, the method was provided to be make, but no makefile was specified in the scrypty! But there still might be a way to compile it, so continuing..."));
+            }
+            else if(currentOS.method == "cmake" && currentOS.cmake === undefined){
+                console.error(colorText(_cyan, "For OS: " + currentOSStr) + colorText(_yellow, " Uh oh, the method was provided to be cmake, but no makefile was specified in the scrypty! But there still might be a way to compile it, so continuing..."));
+            }
+            else if(currentOS.method == "gradle" && currentOS.gradle === undefined){
+                console.error(colorText(_cyan, "For OS: " + currentOSStr) + colorText(_yellow, " Uh oh, the method was provided to be Gradle, but no gradle file was specified in the scrypty! But there still might be a way to compile it, so continuing..."));
+            }
+            else if(currentOS.method == "maven" && currentOS.maven === undefined){
+                console.error(colorText(_cyan, "For OS: " + currentOSStr) + colorText(_yellow, " Uh oh, the method was provided to be Maven, but no maven file was specified in the scrypty! But there still might be a way to compile it, so continuing..."));
+            }
+            else if(currentOS.method == "vs" && currentOS.vsSolution === undefined){
+                console.error(colorText(_cyan, "For OS: " + currentOSStr) + colorText(_yellow, " Uh oh, the method was provided to be Visual Studio, but no VS Solution was specified in the scrypty! But there still might be a way to compile it, so continuing..."));
+            }
+            else if(currentOS.method == "nmake" && currentOS.nmake === undefined){
+                console.error(colorText(_cyan, "For OS: " + currentOSStr) + colorText(_yellow, " Uh oh, the method was provided to be nmake, but no nmake file was specified in the scrypty! But there still might be a way to compile it, so continuing..."));
+            }
+            else if(currentOS.method == "custom" && currentOS.commands === undefined){
+                console.error(colorText(_cyan, "For OS: " + currentOSStr) + colorText(_yellow, " Uh oh, the method was provided to be custom, but no commands were specified in the scrypty! But there still might be a way to compile it, so continuing..."));
+            }
+            else{
+                numOS++; //we only add up the valid os instructions
             }
         }
 
     }
 
     if(numOS == 0){
-        console.error("Uh oh, the scrypty has no compilation instructions for your OS at all! But there still might be a way to compile, so contining...");
+        console.error("Uh oh, the scrypty has no valid compilation instructions for your OS at all! But there still might be a way to compile, so contining...");
+        return 2;
     }
 
 }
 
-function findIfScrypty(files, programType, folder) {
+function findIfScrypty(files) {
     if (files.find((element) => { return element.endsWith(".scrypty"); })) { //lets go, a scrypty file!
         return 1;
     }
