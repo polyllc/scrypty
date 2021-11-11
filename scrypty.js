@@ -130,7 +130,7 @@ function compile(programName){
     //gradle     compile by gradle
     //maven      compile by maven
     //yarn       compile by yarn
-    //npm        compile by npm (either by npm install in wdir or asking the user if they know that the package is available on npm already)
+    //npm        compile by npm (either by npm install in wdir or asking the user if they know that the package is available on npm already) (find package.json)
     //nmakevs    compile by visual studio's nmake
     //custom     compile by custom commands defined in the scrypty file (maybe one day there'll be a scrypty server with scrypty files?)
     //autocustom compile by instructions found in readme (if all else fails!)
@@ -164,16 +164,15 @@ function compile(programName){
     var folder = __dirname + "\\" + programName;
 
     var files = fs.readdirSync(folder);
+
+
     if(findIfScrypty(files)){
         console.log("Found Scrypty file!");
         scryptyFile = folder + "\\" + files.find((element) => { return element.endsWith(".scrypty");} );
         if(verifyScrypty(scryptyFile) != 2){
+            console.log("Verified scrypty!");
             scrypty = parseScrypty(scryptyFile);
             methods.push(getMethod(scrypty)); //we always listen to scrypty file!
-        }
-        else{
-            console.log("The repository was still cloned into: " + folder);
-            return;
         }
     }
     else{
@@ -183,18 +182,16 @@ function compile(programName){
         }
     }
 
+
+
+    //insert finding method code here (without scrypty)
+
+
+
+
+    //compile
     if(methods.length == 1){
-        switch(methods[0]){
-            case "singleg++": 
-            if(scryptyFile != "none"){
-                compileSingleGPP(folder, getScryptyOS(scrypty).mainFile); break;
-            }
-            else {
-                break;
-            }
-            case "custom":
-                compileCustom(folder, scrypty);
-        }
+        compileByMethod(methods[0], scrypty, folder);
     }
     else if(methods.length > 1){
         //insert code to find the best option (prompt user)
@@ -209,7 +206,24 @@ function compile(programName){
 
 }
 
+function compileByMethod(method, scrypty, folder, file = "none"){
+    switch(method){
+        case "singleg++": 
+        if(scrypty !== undefined){
+            compileSingleGPP(folder, getScryptyOS(scrypty).mainFile); break;
+        }
+        else {
+            break;
+        }
+        case "vs":
+            if(scrypty !== undefined){
+                compileVSSolution(folder, getScryptyOS(scrypty).vsSolution);
+            }
 
+        case "custom":
+            compileCustom(folder, scrypty);
+    }
+}
 
 function compileSingleGPP(folder, file){
     console.log("Compiling file " + file + "...");
@@ -224,6 +238,11 @@ function compileSingleGPP(folder, file){
         }
         console.log(`${stdout}`);
     });
+}
+
+function compileVSSolution(folder, file){
+    console.log("Compiling solution...");
+  //  exec("")
 }
 
 
@@ -420,15 +439,15 @@ function verifyScrypty(scryptyFile){ //so much verifying to do!
             if(currentOS.method === undefined){
                 console.error(colorText(_cyan, "For OS: " + currentOSStr) + colorText(_yellow, " Uh oh, no method of compilation was provided! But there still might be a way to compile it, so continuing..."));
             }
-            else if(currentOS.method == "singleg++" && currentOS.mainFile === undefined || currentOS.method == "singlegcc"  && currentOS.mainFile === undefined){
+            else if(currentOS.method == ("singleg++" || "singlegcc" || "singlego" || "singlejava") && currentOS.mainFile === undefined){
                 console.error(colorText(_cyan, "For OS: " + currentOSStr) + colorText(_yellow, " Uh oh, the method was provided to be " + currentOS.method + ", but no main file was provided to compile! But there still might be a way to compile it, so continuing..."));
             }
-            else if(currentOS.method == "make" && currentOS.makeFile === undefined){
+           /* else if(currentOS.method == "make" && currentOS.makeFile === undefined){
                 console.error(colorText(_cyan, "For OS: " + currentOSStr) + colorText(_yellow, " Uh oh, the method was provided to be make, but no makefile was specified in the scrypty! But there still might be a way to compile it, so continuing..."));
             }
             else if(currentOS.method == "cmake" && currentOS.cmake === undefined){
                 console.error(colorText(_cyan, "For OS: " + currentOSStr) + colorText(_yellow, " Uh oh, the method was provided to be cmake, but no makefile was specified in the scrypty! But there still might be a way to compile it, so continuing..."));
-            }
+            }*/ // that doesn't even make sense? make's only input is the directoy, it finds the make file on its own
             else if(currentOS.method == "gradle" && currentOS.gradle === undefined){
                 console.error(colorText(_cyan, "For OS: " + currentOSStr) + colorText(_yellow, " Uh oh, the method was provided to be Gradle, but no gradle file was specified in the scrypty! But there still might be a way to compile it, so continuing..."));
             }
@@ -444,7 +463,26 @@ function verifyScrypty(scryptyFile){ //so much verifying to do!
             else if(currentOS.method == "custom" && currentOS.commands === undefined){
                 console.error(colorText(_cyan, "For OS: " + currentOSStr) + colorText(_yellow, " Uh oh, the method was provided to be custom, but no commands were specified in the scrypty! But there still might be a way to compile it, so continuing..."));
             }
+            //we don't need to check for npm because we can just assume that npm install will install it, but if there is a package specified, install that instead
             else{
+
+
+                if(currentOS.method != ("custom" || "singleg++" || "singlegcc" || "gradle" || "make" || "cmake" || "maven" || "vs" || "nmake")){
+                    numOS--;
+                }
+
+                if(currentOS.method == "custom"){
+                    var goodCommands = 0;
+                    console.log(currentOS.commands.length);
+                    for(var j = 0; j < currentOS.commands.length; j++){
+                        if(currentOS.commands[j].cmd === undefined){
+                            goodCommands--;
+                        }
+                    }
+                    if(goodCommands < 0){
+                        numOS--; //subtract + add == 0
+                    }
+                }
                 numOS++; //we only add up the valid os instructions
             }
         }
@@ -516,8 +554,8 @@ function getFile(url){
 }
 
 
-//download("https://github.com/yarnpkg/yarn");
-compile("jump-cutter-revamped");
+download("https://github.com/dolphin-emu/dolphin");
+//compile("progflow");
 
 
 

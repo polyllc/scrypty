@@ -22,7 +22,10 @@
                 "gradleFile":"thing.gradle",
                 "mavenFile":"thing.maven",
                 "vsSolution":"thing.sln",
-                "nmakeFile":"thing.nmake"
+                "nmakeFile":"thing.nmake",
+                "prereq":[
+                    { "prereq":"g++" } 
+                ]
             },
             "win":{
                 "method":"vs",
