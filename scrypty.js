@@ -103,7 +103,7 @@ async function download(url){
 }
 
 
-function compile(programName){
+async function compile(programName){
     var workingDir = findWorkingDir(programName);
    
 
@@ -170,33 +170,32 @@ function compile(programName){
     var file = ""; //for the file to compile/build off of (like the main .cpp, the .sln, etc)
 
     if(findIfScrypty(files)){
-        console.log("Found Scrypty file!");
-        scryptyFile = folder + "\\" + files.find((element) => { return element.endsWith(".scrypty");} );
-        if(verifyScrypty(scryptyFile) != 2){
-            validScrypty = 1;
-            console.log("Verified scrypty!");
-            scrypty = parseScrypty(scryptyFile);
-            methods.push(getMethod(scrypty)); //we always listen to scrypty file!
+        if(value == 1){
+            console.log("Found Scrypty file!");
+            scryptyFile = folder + "\\" + files.find((element) => { return element.endsWith(".scrypty");} );
+            if(verifyScrypty(scryptyFile) != 2){
+                validScrypty = 1;
+                console.log("Verified scrypty!");
+                scrypty = parseScrypty(scryptyFile);
+                methods.push(getMethod(scrypty)); //we always listen to scrypty file!
+            }
         }
     }
+        if(validScrypty == 0){
+            if(os.hostname() == ("freebsd" || "aix" || "openbsd" || "android" || "sunos")){ //honestly no idea how I'm going to test this, well other than install each os in a vm
+                console.error("Sorry! But scrypty doesn't support freebsd, aix, sunos, openbsd or android. Since there wasn't a scrypty file in this repository, you can't compile this using scrypty. The repository was still cloned into: " + folder);
+                return;
+            }
+            //insert finding method code here (without scrypty)
 
-    if(validScrypty == 0){
-        if(os.hostname() == ("freebsd" || "aix" || "openbsd" || "android" || "sunos")){ //honestly no idea how I'm going to test this, well other than install each os in a vm
-            console.error("Sorry! But scrypty doesn't support freebsd, aix, sunos, openbsd or android. Since there wasn't a scrypty file in this repository, you can't compile this using scrypty. The repository was still cloned into: " + folder);
-            return;
+            file = await findMethods(folder, programName, methods, file);
         }
-        //insert finding method code here (without scrypty)
 
-        if(findVSMethod(folder, programName)){
-            methods.push("vs");
-            file = findVSMethod(folder, programName);
-        }
-    }
 
     //compile
     if(methods.length == 1){
         console.log(colorText(_black, "Compiling by " + methods[0], _bgWhite));
-        compileByMethod(methods[0], scrypty, folder, programName);
+        compileByMethod(methods[0], scrypty, folder, programName, file);
         
     }
     else if(methods.length > 1){
@@ -207,23 +206,41 @@ function compile(programName){
         return;
     }
     
+
     //console.log("Repository installed! Program is found in: " + folder + ". Run this program with `scrypty run " + programName + "`");
     //rl.close();
 
 }
 
 
-var getDirectories = function (src, callback) { //thanks stackoverflow, Paul Mougel
-    glob(src + '/**/*', callback);
+var getDirectories = function (src) { //thanks stackoverflow, Paul Mougel
+    return new Promise(resolve =>{
+        glob(src + '/**/*', (error, res) => resolve(res));
+    });
 }
 
 
 
-function findVSMethod(folder, programName){
+async function findMethods(folder, programName, methods) {
+    var file;
+    var vs = await findVSMethod(folder, programName);
+    if (vs) {
+        file = vs;
+        methods.push("vs");
+    }
+    return new Promise((resolve) => {
+        resolve(file);
+    });
+}
+
+async function findVSMethod(folder, programName){
 
     var sln = ""; 
 
-    getDirectories(__dirname + "\\" + programName, (err, res) => { //uhh this returns all files in the folder, which takes a while, but compiling takes longer so the user will have to wait :)
+
+    
+
+    var res = await getDirectories(__dirname + "\\" + programName); //uhh this returns all files in the folder, which takes a while, but compiling takes longer so the user will have to wait :)
         var slns = res.filter((element) => { return element.endsWith(".sln"); });
         preferredSlns = slns.filter((element) => { return (element.substr(element.lastIndexOf("/")).indexOf("dolphin") != -1) ?  element : "" }); //the preferred sln is the slns in the array with the programName in the file name
         notPreferredSlns = slns.filter((element) => { return (element.substr(element.lastIndexOf("/")).indexOf("dolphin") == -1) ?  element : "" }); //to filter out the rest
@@ -247,7 +264,7 @@ function findVSMethod(folder, programName){
             }
         }
 
-        var r = "";
+        var r;
 
         var validNum = false;
 
@@ -274,11 +291,12 @@ function findVSMethod(folder, programName){
                 console.log(colorText(_red, "Choose a valid option!"));
             }
         }
-
+    return new Promise((resolve) => {
+        console.log(sln);
+        resolve(sln);
     });
-
-    return sln;
 }
+
 
 
 
@@ -308,6 +326,9 @@ function compileByMethod(method, scrypty, folder, programName, file = "none"){
         case "vs":
             if(scrypty !== undefined){
                 compileVSSolution(folder, programName + "\\" + getScryptyOS(scrypty).vsSolution);
+            }
+            else{
+                compileVSSolution(folder, file);
             }
             break;
         case "custom":
@@ -365,16 +386,16 @@ function compileSingleGo(folder, file){ //todo, test it
 function compileVSSolution(folder, file){ //todo, be able to select the solution configuration
     console.log(colorText(_magenta, "Compiling solution..."));
     exec("msbuild " + file, (error, stdout, stderr) => {
-        if (error) {
-            console.log(`error: ${error.message}`);
-            console.log(colorText(_white, "Uh oh! The build failed! Most likely the .sln or any of the files that the .sln mentions has an error in it. It also might be an error due to not having MSBuild in your environment variables! Another common error is not having the right build tools installed, which you can install using the Visual Studio installer.", _bgRed));
-            return;
-        }
         if (stderr) {
             console.log(`${stderr}`);
            // return;
         }
         console.log(`${stdout}`);
+        if (error) {
+            console.log(`error: ${error.message}`);
+            console.log(colorText(_white, "Uh oh! The build failed! Most likely the .sln or any of the files that the .sln mentions has an error in it. It also might be an error due to not having MSBuild in your environment variables! Another common error is not having the right build tools installed, which you can install using the Visual Studio installer.", _bgRed));
+            return;
+        }
     });
 }
 
@@ -689,7 +710,7 @@ function getFile(url){
 
 
 //download("https://github.com/electron/electron");
-compile("dolphin");
+compile("progflow");
 
 
 
