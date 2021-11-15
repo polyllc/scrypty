@@ -458,9 +458,48 @@ function compileVSSolution(folder, file, programName){ //todo, be able to select
             }
         }
 
+        validNum = false;
+        var vsVer = 3;
 
-        exec("cd " + programName + " && msbuild -t:restore " + file, (error, stdout, stderr) => { //restore nuget pacakges (if needed)
-            exec("msbuild " + file + " /property:Configuration=\"" + config + "\" /property:Platform=\"" + platform + "\"", (error, stdout, stderr) => {
+
+        console.log(colorText(_magenta, "[1] ") + colorText(_cyan, "Visual Studio 2017"));
+        console.log(colorText(_magenta, "[2] ") + colorText(_cyan, "Visual Studio 2019"));
+        console.log(colorText(_magenta, "[3] ") + colorText(_cyan, "Visual Studio 2022"));
+
+        while(!validNum){
+
+            var r = prompt("Select your Visual Studio version (if you just downloaded it, then you probably have 2022): ");
+
+            //geniunely no idea why this works, does prompt make it an integer already? if so, i know how this works
+            if(parseInt(r)){
+                if(r > 0 && r <= 3){
+                    switch(r){
+                        case "1": vsVer = "v141"; break;
+                        case "2": vsVer = "v142"; break;
+                        case "3": vsVer = "v143"; break;
+                    }
+                    validNum = true;
+                }    
+                else{
+                    console.log(colorText(_red, "Choose a valid option!"));
+                }
+            }
+            else{
+                console.log(colorText(_red, "Choose a valid option!"));
+            }
+        }
+        exec("msbuild -t:restore " + "-p:RestorePackagesConfig=true /p:PlatformToolset=" + vsVer + " /property:Configuration=\"" + config + "\" /property:Platform=\"" + platform + "\" " + file, (error, stdout, stderr) => { //restore nuget pacakges (if needed)
+            if (stderr) {
+                console.log(`${stderr}`);
+            // return;
+            }
+            console.log(`${stdout}`);
+            if (error) {
+                console.log(`error: ${error.message}`);
+                console.log(colorText(_white, "Uh oh! The build failed! Most likely the .sln or any of the files that the .sln mentions has an error in it. It also might be an error due to not having MSBuild in your environment variables! Another common error is not having the right build tools installed, which you can install using the Visual Studio installer.", _bgRed));
+               // return;
+            }
+            exec("msbuild " + file + " /p:PlatformToolset=" + vsVer + " /property:Configuration=\"" + config + "\" /property:Platform=\"" + platform + "\"", (error, stdout, stderr) => {
                 if (stderr) {
                     console.log(`${stderr}`);
                 // return;
@@ -786,7 +825,7 @@ function getFile(url){
 }
 
 
-download("https://github.com/dolphin-emu/dolphin");
+download("https://github.com/microsoft/terminal");
 //compile("dolphin");
 
 
