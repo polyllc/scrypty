@@ -56,16 +56,23 @@ function getProgramNameFromURL(url){
 }
 
 
-
-//todo
-//compile
-//  make, cmake, visual studio (hopefully!?!?!?), go compiler, g++, gcc, clang, .net (c#), or just set it in the main.json file for whatever type file how you want to compile with
-//run
-// java, python, node.js, bat/sh
-//NOT supported
-// php (burh of course not), sql (idk even how i could go about), unity, unreal or any game engine at that
-
-//make sure all files pass the checksum (if the repo has said checksums)
+//scrypty
+//a github repository installer/package installer (by zip link) & runner
+//-----------------------------
+//what scrpyty DOES do
+//  download git repo's
+//  download zip files and extracts
+//  reads scrypty files
+//  compiles by instruction on scrypty file
+//  finds a way to compile by the repo's files
+//  be able to run said repo's
+//  run scripts as defined in a scripts folder of a repo or defined by the scrypty file
+//  delete repo's
+//what scrypty DOESN'T do
+//  be a package manager
+//  install new updates (unless fresh install by user request)
+//what scrypty SHOULDN'T do (but is able to)
+//  be the sole builder (use make, cmake, sln, gradle or something else instead)
 
 
 
@@ -148,9 +155,9 @@ async function compile(programName){
     //check if there are multiple files, find the one with file names that would make sense
     // like: main.cpp, {programname}.cpp, index.cpp, stuff like that
     //if there are multiple files, find the most popular extension (doesn't always work, ex: electron)
-    //read the readme for compile instructions, use keywords such as `` (code blocks), the current running os, something like building, # building, or something like that
+    //read the readme for compile instructions, use keywords such as ` `/``` ``` (code blocks), the current running os, something like building, # building, or something like that
     //find folder with scripts for install.sh or build.sh or something with that (confirm with user!)
-    //find install.sh or build.sh (confirm with user!)
+    //find building.md or something
 
 
 
@@ -167,7 +174,8 @@ async function compile(programName){
 
     var validScrypty = 0;
 
-    var file = ""; //for the file to compile/build off of (like the main .cpp, the .sln, etc)
+    var file = new Map(); //for the file to compile/build off of (like the main .cpp, the .sln, etc)
+    //todo make that a map
 
     if(findIfScrypty(files)){
         if(value == 1){
@@ -181,15 +189,15 @@ async function compile(programName){
             }
         }
     }
-        if(validScrypty == 0){
-            if(os.hostname() == ("freebsd" || "aix" || "openbsd" || "android" || "sunos")){ //honestly no idea how I'm going to test this, well other than install each os in a vm
-                console.error("Sorry! But scrypty doesn't support freebsd, aix, sunos, openbsd or android. Since there wasn't a scrypty file in this repository, you can't compile this using scrypty. The repository was still cloned into: " + folder);
-                return;
-            }
-            //insert finding method code here (without scrypty)
-
-            file = await findMethods(folder, programName, methods, file);
+    if(validScrypty == 0){
+        if(os.hostname() == ("freebsd" || "aix" || "openbsd" || "android" || "sunos")){ //honestly no idea how I'm going to test this, well other than install each os in a vm
+            console.error("Sorry! But scrypty doesn't support freebsd, aix, sunos, openbsd or android. Since there wasn't a scrypty file in this repository, you can't compile this using scrypty. The repository was still cloned into: " + folder);
+            return;
         }
+        //insert finding method code here (without scrypty)
+
+        file = await findMethods(folder, programName, methods, file);
+    }
 
 
     //compile
@@ -213,8 +221,8 @@ async function compile(programName){
 }
 
 
-var getDirectories = function (src) { //thanks stackoverflow, Paul Mougel
-    return new Promise(resolve =>{
+function getDirectories(src) { 
+    return new Promise(resolve =>{ //to make it valid with await
         glob(src + '/**/*', (error, res) => resolve(res));
     });
 }
@@ -222,18 +230,18 @@ var getDirectories = function (src) { //thanks stackoverflow, Paul Mougel
 
 
 async function findMethods(folder, programName, methods) {
-    var file;
+    var file = new Map();
     var vs = await findVSMethod(folder, programName);
     if (vs) {
-        file = vs;
+        file.set("vs", vs);
         methods.push("vs");
     }
     return new Promise((resolve) => {
-        resolve(file);
+        resolve(file); //some methods don't return files, so we just return undefined, and thats ok because compileByMethod wont even access file if its not needed
     });
 }
 
-async function findVSMethod(folder, programName){
+async function findVSMethod(folder, programName){ //todo make it so if there's only one sln, just continue
 
     var sln = ""; 
 
@@ -242,14 +250,15 @@ async function findVSMethod(folder, programName){
 
     var res = await getDirectories(__dirname + "\\" + programName); //uhh this returns all files in the folder, which takes a while, but compiling takes longer so the user will have to wait :)
         var slns = res.filter((element) => { return element.endsWith(".sln"); });
-        preferredSlns = slns.filter((element) => { return (element.substr(element.lastIndexOf("/")).indexOf("dolphin") != -1) ?  element : "" }); //the preferred sln is the slns in the array with the programName in the file name
-        notPreferredSlns = slns.filter((element) => { return (element.substr(element.lastIndexOf("/")).indexOf("dolphin") == -1) ?  element : "" }); //to filter out the rest
+        preferredSlns = slns.filter((element) => { return (element.substr(element.lastIndexOf("/")).indexOf(programName) != -1) ?  element : "" }); //the preferred sln is the slns in the array with the programName in the file name
+        notPreferredSlns = slns.filter((element) => { return (element.substr(element.lastIndexOf("/")).indexOf(programName) == -1) ?  element : "" }); //to filter out the rest
 
         if(slns.length == 0){
             return;
         }
         console.log("Found solutions!")
         console.log(colorText(_black, _dim + "Choose a solution to compile (you can choose later if there are more methods to compile whether or not to compile by visual studio solutions)", _bgCyan));
+        console.log("\n");
 
         if(preferredSlns.length != 0){
             console.log(colorText(_green, _bright + "These solutions are the better option to choose from (because they have the repo's name in the file name)"));
@@ -257,8 +266,9 @@ async function findVSMethod(folder, programName){
                 console.log(colorText(_magenta, _bright + "[" + (i+1) + "]")  + " " + preferredSlns[i]);
             }
         }
+        console.log("\n");
         if(notPreferredSlns.length != 0){
-            console.log(colorText(_yellow, _bright + "Other solutions (might be viable still!)"));
+            console.log(colorText(_yellow, _bright + "Other solutions (might still be viable!)"));
             for(var i = 0; i < notPreferredSlns.length; i++){
                 console.log(colorText(_magenta, _bright + "[" + (i+1+preferredSlns.length) + "]")  + " " + notPreferredSlns[i]);
             }
@@ -292,7 +302,6 @@ async function findVSMethod(folder, programName){
             }
         }
     return new Promise((resolve) => {
-        console.log(sln);
         resolve(sln);
     });
 }
@@ -300,35 +309,35 @@ async function findVSMethod(folder, programName){
 
 
 
-function compileByMethod(method, scrypty, folder, programName, file = "none"){
+function compileByMethod(method, scrypty, folder, programName, file = new Map()){
     switch(method){
         case "singleg++": 
         if(scrypty !== undefined){
             compileSingleGPP(folder, getScryptyOS(scrypty).mainFile); break;
         }
         else {
-            compileSingleGPP(folder, file); break;
+            compileSingleGPP(folder, file.get("singleg++")); break;
         }
         case "singlegcc": 
         if(scrypty !== undefined){
             compileSingleGCC(folder, getScryptyOS(scrypty).mainFile); break;
         }
         else {
-            compileSingleGCC(folder, file); break;
+            compileSingleGCC(folder, file.get("singlegcc")); break;
         }
         case "singlego": 
         if(scrypty !== undefined){
             compileSingleGo(folder, getScryptyOS(scrypty).mainFile); break;
         }
         else {
-            compileSingleGo(folder, file); break;
+            compileSingleGo(folder, file.get("singlego")); break;
         }
         case "vs":
             if(scrypty !== undefined){
-                compileVSSolution(folder, programName + "\\" + getScryptyOS(scrypty).vsSolution);
+                compileVSSolution(folder, programName + "\\" + getScryptyOS(scrypty).vsSolution, programName);
             }
             else{
-                compileVSSolution(folder, file);
+                compileVSSolution(folder, file.get("vs"), programName);
             }
             break;
         case "custom":
@@ -383,19 +392,87 @@ function compileSingleGo(folder, file){ //todo, test it
         console.log(`${stdout}`);
     });
 }
-function compileVSSolution(folder, file){ //todo, be able to select the solution configuration
+
+//todo: /property:Configuration=Release /property:Platform=x64
+function compileVSSolution(folder, file, programName){ //todo, be able to select the solution configuration
     console.log(colorText(_magenta, "Compiling solution..."));
-    exec("msbuild " + file, (error, stdout, stderr) => {
-        if (stderr) {
-            console.log(`${stderr}`);
-           // return;
+
+
+
+    //config platforms for reference :)
+    /*
+    GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		CodeCoverage|Any CPU = CodeCoverage|Any CPU
+		Debug|Any CPU = Debug|Any CPU
+		Linux|Any CPU = Linux|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+
+    */
+    var sln;
+    fs.readFile(file, 'utf8', (err, data) => {
+
+        sln = data.substr(data.indexOf("GlobalSection(SolutionConfigurationPlatforms) = preSolution") + "GlobalSection(SolutionConfigurationPlatforms) = preSolution".length, data.substr(data.indexOf("GlobalSection(SolutionConfigurationPlatforms) = preSolution")).indexOf("EndGlobalSection"));
+
+        sln = sln.split("\n");
+        sln = sln.filter((element) => { return element.indexOf("|") != -1});
+
+        var configs = [];
+        var platforms = [];
+
+        for(var i = 0; i < sln.length; i++){
+            sln[i] = sln[i].replaceAll('\r', '').replaceAll('\t', '');
+            sln[i] = sln[i].substr(0, sln[i].indexOf("=")-1); //to also get rid of the space before the =
+            configs[i] = sln[i].split("|")[0];
+            platforms[i] = sln[i].split("|")[1];
         }
-        console.log(`${stdout}`);
-        if (error) {
-            console.log(`error: ${error.message}`);
-            console.log(colorText(_white, "Uh oh! The build failed! Most likely the .sln or any of the files that the .sln mentions has an error in it. It also might be an error due to not having MSBuild in your environment variables! Another common error is not having the right build tools installed, which you can install using the Visual Studio installer.", _bgRed));
-            return;
+
+        console.log(colorText(_green, "Configuration Platforms:"));
+
+        for(var i = 0; i < sln.length; i++){
+            console.log(colorText(_magenta, "[" + (i+1) + "]") + " " + colorText(_green, _bright + sln[i]));
         }
+
+        var validNum = false;
+
+        var config;
+        var platform;
+
+        while(!validNum){
+
+            var r = prompt("Choose a configuration platform to compile: ");
+
+            //geniunely no idea why this works, does prompt make it an integer already? if so, i know how this works
+            if(parseInt(r)){
+                if(r > 0 && r <= sln.length){
+                    config = configs[r-1];
+                    platform = platforms[r-1];
+                    validNum = true;
+                }    
+                else{
+                    console.log(colorText(_red, "Choose a valid option!"));
+                }
+            }
+            else{
+                console.log(colorText(_red, "Choose a valid option!"));
+            }
+        }
+
+
+        exec("cd " + programName + " && msbuild -t:restore " + file, (error, stdout, stderr) => { //restore nuget pacakges (if needed)
+            exec("msbuild " + file + " /property:Configuration=\"" + config + "\" /property:Platform=\"" + platform + "\"", (error, stdout, stderr) => {
+                if (stderr) {
+                    console.log(`${stderr}`);
+                // return;
+                }
+                console.log(`${stdout}`);
+                if (error) {
+                    console.log(`error: ${error.message}`);
+                    console.log(colorText(_white, "Uh oh! The build failed! Most likely the .sln or any of the files that the .sln mentions has an error in it. It also might be an error due to not having MSBuild in your environment variables! Another common error is not having the right build tools installed, which you can install using the Visual Studio installer.", _bgRed));
+                    return;
+                }
+            });
+        });
     });
 }
 
@@ -601,7 +678,7 @@ function verifyScrypty(scryptyFile){ //so much verifying to do!
             }
             else if(currentOS.method == "cmake" && currentOS.cmake === undefined){
                 console.error(colorText(_cyan, "For OS: " + currentOSStr) + colorText(_yellow, " Uh oh, the method was provided to be cmake, but no makefile was specified in the scrypty! But there still might be a way to compile it, so continuing..."));
-            }*/ // that doesn't even make sense? make's only input is the directoy, it finds the make file on its own
+            }*/ // that doesn't even make sense? make's only input is the directory, it finds the make file on its own
             else if(currentOS.method == "gradle" && currentOS.gradle === undefined){
                 console.error(colorText(_cyan, "For OS: " + currentOSStr) + colorText(_yellow, " Uh oh, the method was provided to be Gradle, but no gradle file was specified in the scrypty! But there still might be a way to compile it, so continuing..."));
             }
@@ -645,7 +722,7 @@ function verifyScrypty(scryptyFile){ //so much verifying to do!
     }
 
     if(numOS == 0){
-        console.error("Uh oh, the scrypty has no valid compilation instructions for your OS at all! But there still might be a way to compile, so contining...");
+        console.error("Uh oh, the scrypty has no valid compilation instructions for your OS at all! But there still might be a way to compile, so continuing...");
         return 2;
     }
 
@@ -709,8 +786,8 @@ function getFile(url){
 }
 
 
-//download("https://github.com/electron/electron");
-compile("progflow");
+download("https://github.com/dolphin-emu/dolphin");
+//compile("dolphin");
 
 
 
@@ -725,10 +802,10 @@ async function gitDownload(url, programName){
 
     console.log("Cloning into " + folder + "...");
 
-    exec("git clone " + url + " " + folder, (error, stdout, stderr) => {
+    exec("git clone " + url + " " + folder + " --recursive", (error, stdout, stderr) => {
         if (error) {
             console.log(`error: ${error.message}`);
-            return;
+         //   return;
         }
         if (stderr) {
             console.log(`${stderr}`);
