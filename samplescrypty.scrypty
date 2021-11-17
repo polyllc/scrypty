@@ -46,7 +46,7 @@
         "type":"command",
         "commands":[
             { "command":"scrypty", "type":"main" },
-            { "command":"scrypty list", "type":"command", "description":"list the scrypty's installed"}
+            { "command":"scrypty list", "type":"command", "description":"list the scryptys installed"}
         ]
     }
 }
