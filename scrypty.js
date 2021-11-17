@@ -178,7 +178,6 @@ async function compile(programName){
     //todo make that a map
 
     if(findIfScrypty(files)){
-        if(value == 1){
             console.log("Found Scrypty file!");
             scryptyFile = folder + "\\" + files.find((element) => { return element.endsWith(".scrypty");} );
             if(verifyScrypty(scryptyFile) != 2){
@@ -187,7 +186,6 @@ async function compile(programName){
                 scrypty = parseScrypty(scryptyFile);
                 methods.push(getMethod(scrypty)); //we always listen to scrypty file!
             }
-        }
     }
     if(validScrypty == 0){
         if(os.hostname() == ("freebsd" || "aix" || "openbsd" || "android" || "sunos")){ //honestly no idea how I'm going to test this, well other than install each os in a vm
@@ -196,7 +194,7 @@ async function compile(programName){
         }
         //insert finding method code here (without scrypty)
 
-        file = await findMethods(folder, programName, methods, file);
+        file = await findMethods(folder, programName, methods, file); //no idea why, but methods is global, so we don't even need to return that
     }
 
 
@@ -215,8 +213,6 @@ async function compile(programName){
     }
     
 
-    //console.log("Repository installed! Program is found in: " + folder + ". Run this program with `scrypty run " + programName + "`");
-    //rl.close();
 
 }
 
@@ -250,8 +246,8 @@ async function findVSMethod(folder, programName){ //todo make it so if there's o
 
     var res = await getDirectories(__dirname + "\\" + programName); //uhh this returns all files in the folder, which takes a while, but compiling takes longer so the user will have to wait :)
         var slns = res.filter((element) => { return element.endsWith(".sln"); });
-        preferredSlns = slns.filter((element) => { return (element.substr(element.lastIndexOf("/")).indexOf(programName) != -1) ?  element : "" }); //the preferred sln is the slns in the array with the programName in the file name
-        notPreferredSlns = slns.filter((element) => { return (element.substr(element.lastIndexOf("/")).indexOf(programName) == -1) ?  element : "" }); //to filter out the rest
+        preferredSlns = slns.filter((element) => { return (element.toLowerCase().substr(element.lastIndexOf("/")).indexOf(programName) != -1) ?  element : "" }); //the preferred sln is the slns in the array with the programName in the file name
+        notPreferredSlns = slns.filter((element) => { return (element.toLowerCase().substr(element.lastIndexOf("/")).indexOf(programName) == -1) ?  element : "" }); //to filter out the rest
 
         if(slns.length == 0){
             return;
@@ -259,6 +255,9 @@ async function findVSMethod(folder, programName){ //todo make it so if there's o
         console.log("Found solutions!")
         console.log(colorText(_black, _dim + "Choose a solution to compile (you can choose later if there are more methods to compile whether or not to compile by visual studio solutions)", _bgCyan));
         console.log("\n");
+
+
+        console.log(colorText(_green, colorText(_cyan, _bright + "[0]") + _bright + " Skip/Don't compile by Visual Studio"));
 
         if(preferredSlns.length != 0){
             console.log(colorText(_green, _bright + "These solutions are the better option to choose from (because they have the repo's name in the file name)"));
@@ -283,7 +282,7 @@ async function findVSMethod(folder, programName){ //todo make it so if there's o
 
 
             //geniunely no idea why this works, does prompt make it an integer already? if so, i know how this works
-            if(parseInt(r)){
+            if(parseInt(r) || r == "0"){
                 if(r > 0 && r <= slns.length){
                     if(parseInt(r) > preferredSlns.length){ //parseInt just in case
                         sln = notPreferredSlns[parseInt(r)-preferredSlns.length-1];
@@ -292,13 +291,17 @@ async function findVSMethod(folder, programName){ //todo make it so if there's o
                         sln = preferredSlns[parseInt(r)-1];
                     }
                     validNum = true;
-                }    
+                }  
+                else if(r == "0"){
+                    console.log(colorText(_red, "Not compiling by Visual Studio (skipped by user)"));
+                    validNum = true;
+                }  
                 else{
                     console.log(colorText(_red, "Choose a valid option!"));
                 }
             }
             else{
-                console.log(colorText(_red, "Choose a valid option!"));
+                console.log(colorText(_red, "Choose a valid option!!"));
             }
         }
     return new Promise((resolve) => {
@@ -344,6 +347,7 @@ function compileByMethod(method, scrypty, folder, programName, file = new Map())
             compileCustom(folder, scrypty);
             break;
     }
+    console.log("Repository installed! Program is found in: " + folder + ". Run this program with `scrypty run " + programName + "`");
 }
 
 function compileSingleGPP(folder, file){
@@ -462,6 +466,7 @@ function compileVSSolution(folder, file, programName){ //todo, be able to select
         var vsVer = 3;
 
 
+        console.log(colorText(_magenta, "[0] ") + colorText(_cyan, "Skip/Use default"));
         console.log(colorText(_magenta, "[1] ") + colorText(_cyan, "Visual Studio 2017"));
         console.log(colorText(_magenta, "[2] ") + colorText(_cyan, "Visual Studio 2019"));
         console.log(colorText(_magenta, "[3] ") + colorText(_cyan, "Visual Studio 2022"));
@@ -470,8 +475,7 @@ function compileVSSolution(folder, file, programName){ //todo, be able to select
 
             var r = prompt("Select your Visual Studio version (if you just downloaded it, then you probably have 2022): ");
 
-            //geniunely no idea why this works, does prompt make it an integer already? if so, i know how this works
-            if(parseInt(r)){
+            if(parseInt(r) || r == "0"){
                 if(r > 0 && r <= 3){
                     switch(r){
                         case "1": vsVer = "v141"; break;
@@ -480,6 +484,10 @@ function compileVSSolution(folder, file, programName){ //todo, be able to select
                     }
                     validNum = true;
                 }    
+                else if(r == "0"){
+                    console.log(colorText(_green, "Skipping..."));
+                    validNum = true;
+                }
                 else{
                     console.log(colorText(_red, "Choose a valid option!"));
                 }
@@ -488,7 +496,52 @@ function compileVSSolution(folder, file, programName){ //todo, be able to select
                 console.log(colorText(_red, "Choose a valid option!"));
             }
         }
-        exec("msbuild -t:restore " + "-p:RestorePackagesConfig=true /p:PlatformToolset=" + vsVer + " /property:Configuration=\"" + config + "\" /property:Platform=\"" + platform + "\" " + file, (error, stdout, stderr) => { //restore nuget pacakges (if needed)
+
+
+        var vssdk;
+
+        console.log(colorText(_magenta, "[0] ") + colorText(_yellow, "Skip/Use default"));
+        console.log(colorText(_magenta, "[1] ") + colorText(_cyan, "10.0.17134.0"));
+        console.log(colorText(_magenta, "[2] ") + colorText(_cyan, "10.0.17763.0"));
+        console.log(colorText(_magenta, "[3] ") + colorText(_cyan, "10.0.18362.0"));
+        console.log(colorText(_magenta, "[4] ") + colorText(_cyan, "10.0.19041.0"));
+        console.log(colorText(_magenta, "[5] ") + colorText(_cyan, "10.0.20348.0"));
+        console.log(colorText(_magenta, "[6] ") + colorText(_cyan, "10.0.22000.0"));
+
+        validNum = false;
+
+        while(!validNum){
+
+            var r = prompt("Select the preferred Windows 10 SDK: ");
+
+            if(parseInt(r) || r == "0"){
+                if(r > 0 && r <= 6){
+                    switch(r){
+                        case "1": vssdk = "10.0.17134.0"; break;
+                        case "2": vssdk = "10.0.17763.0"; break;
+                        case "3": vssdk = "10.0.18362.0"; break;
+                        case "4": vssdk = "10.0.19041.0"; break;
+                        case "5": vssdk = "10.0.20348.0"; break;
+                        case "6": vssdk = "10.0.22000.0"; break;
+                    }
+                    validNum = true;
+                }    
+                else if(r == "0"){
+                    console.log(colorText(_green, "Skipping..."));
+                    validNum = true;
+                }
+                else{
+                    console.log(colorText(_red, "Choose a valid option!"));
+                }
+            }
+            else{
+                console.log(colorText(_red, "Choose a valid option!"));
+            }
+        }
+        
+
+        ///p:WindowsTargetPlatformVersion=xx;WindowsTargetPlatformMinVersion=xx
+        exec("msbuild -t:restore " + " /p:WindowsTargetPlatformVersion=\"" + vssdk + "\";WindowsTargetPlatformMinVersion=\"" + vssdk  + "\" -p:RestorePackagesConfig=true /p:PlatformToolset=" + vsVer + " /property:Configuration=\"" + config + "\" /property:Platform=\"" + platform + "\" " + file, (error, stdout, stderr) => { //restore nuget pacakges (if needed)
             if (stderr) {
                 console.log(`${stderr}`);
             // return;
@@ -499,7 +552,7 @@ function compileVSSolution(folder, file, programName){ //todo, be able to select
                 console.log(colorText(_white, "Uh oh! The build failed! Most likely the .sln or any of the files that the .sln mentions has an error in it. It also might be an error due to not having MSBuild in your environment variables! Another common error is not having the right build tools installed, which you can install using the Visual Studio installer.", _bgRed));
                // return;
             }
-            exec("msbuild " + file + " /p:PlatformToolset=" + vsVer + " /property:Configuration=\"" + config + "\" /property:Platform=\"" + platform + "\"", (error, stdout, stderr) => {
+            exec("msbuild " + file + " /p:WindowsTargetPlatformVersion=\"" + vssdk + "\";WindowsTargetPlatformMinVersion=\"" + vssdk  + "\" /p:PlatformToolset=" + vsVer + " /property:Configuration=\"" + config + "\" /property:Platform=\"" + platform + "\"", (error, stdout, stderr) => {
                 if (stderr) {
                     console.log(`${stderr}`);
                 // return;
@@ -507,7 +560,14 @@ function compileVSSolution(folder, file, programName){ //todo, be able to select
                 console.log(`${stdout}`);
                 if (error) {
                     console.log(`error: ${error.message}`);
-                    console.log(colorText(_white, "Uh oh! The build failed! Most likely the .sln or any of the files that the .sln mentions has an error in it. It also might be an error due to not having MSBuild in your environment variables! Another common error is not having the right build tools installed, which you can install using the Visual Studio installer.", _bgRed));
+                    console.log(colorText(_white, `Uh oh! The build failed! Most likely the .sln or any of the files that the .sln mentions has an error in it. It also might be an error due to not having MSBuild in your environment variables! Another common error is not having the right build tools installed, which you can install using the Visual Studio installer.
+                    You can also try these things:
+                    - Changing the build tools version (visual studio version option)
+                    - Changing the platform configuration
+                    - Changing the Windows SDK version
+                    - Choosing another .sln
+                    - Making sure that you've set up the build environment (using something like cmake or whatever the repo says)
+                    - If there are other options to compile, try those instead`, _bgRed));
                     return;
                 }
             });
@@ -825,7 +885,7 @@ function getFile(url){
 }
 
 
-download("https://github.com/microsoft/terminal");
+download("https://github.com/xenia-project/xenia");
 //compile("dolphin");
 
 
