@@ -76,6 +76,12 @@ function getProgramNameFromURL(url){
 
 
 
+//todo
+//finish methods and compiling
+//add prerequisite checking (on scryptys)
+//add custom os installers
+//add custom commands on scryptys
+
 
 async function download(url){
 
@@ -206,6 +212,30 @@ async function compile(programName){
     }
     else if(methods.length > 1){
         //insert code to find the best option (prompt user)
+        console.log(colorText(_green, _bright + "Found more than one way to compile"));
+        for(var i = 0; i < methods.length; i++){
+            console.log(colorText(_cyan, _bright + "[" + (i+1) + "]") + " " + methods[i]);
+        }
+        var validNum = false;
+        while(!validNum){
+           var r = prompt("Choose the way you want to compile: ");
+
+
+            //geniunely no idea why this works, does prompt make it an integer already? if so, i know how this works
+            if(parseInt(r)){
+                if(r > 0 && r <= methods.length){
+                    console.log(colorText(_black, "Compiling by " + methods[parseInt(r)-1], _bgWhite));
+                    compileByMethod(methods[parseInt(r)-1], scrypty, folder, programName, file);                    
+                    validNum = true;
+                }  
+                else{
+                    console.log(colorText(_red, "Choose a valid option!"));
+                }
+            }
+            else{
+                console.log(colorText(_red, "Choose a valid option!!"));
+            }
+        }
     }
     else{
         console.log("Couldn't find a way to compile this repository, make sure it's not a library or something that can't be compiled, or compile it yourself. The repository has been cloned into: " + folder);
@@ -232,6 +262,12 @@ async function findMethods(folder, programName, methods) {
         file.set("vs", vs);
         methods.push("vs");
     }
+
+    var cmake = await findIfCMake(folder);
+    if(cmake){
+        methods.push("cmake");
+    }
+
     return new Promise((resolve) => {
         resolve(file); //some methods don't return files, so we just return undefined, and thats ok because compileByMethod wont even access file if its not needed
     });
@@ -309,10 +345,16 @@ async function findVSMethod(folder, programName){ //todo make it so if there's o
     });
 }
 
+async function findIfCMake(folder){
+    var res = await getDirectories(folder);
+    var cmake = res.find((element) => {return element.indexOf("CMakeLists.txt") != -1 ? true : false;}) !== undefined ? true : false;
+    return new Promise((resolve) => {
+        resolve(cmake);
+    });
+}
 
 
-
-function compileByMethod(method, scrypty, folder, programName, file = new Map()){
+async function compileByMethod(method, scrypty, folder, programName, file = new Map()){
     switch(method){
         case "singleg++": 
         if(scrypty !== undefined){
@@ -337,10 +379,10 @@ function compileByMethod(method, scrypty, folder, programName, file = new Map())
         }
         case "vs":
             if(scrypty !== undefined){
-                compileVSSolution(folder, programName + "\\" + getScryptyOS(scrypty).vsSolution, programName);
+                await compileVSSolution(folder, programName + "\\" + getScryptyOS(scrypty).vsSolution, programName);
             }
             else{
-                compileVSSolution(folder, file.get("vs"), programName);
+                await compileVSSolution(folder, file.get("vs"), programName);
             }
             break;
         case "custom":
@@ -397,8 +439,7 @@ function compileSingleGo(folder, file){ //todo, test it
     });
 }
 
-//todo: /property:Configuration=Release /property:Platform=x64
-function compileVSSolution(folder, file, programName){ //todo, be able to select the solution configuration
+function compileVSSolution(folder, file, programName){
     console.log(colorText(_magenta, "Compiling solution..."));
 
 
@@ -447,12 +488,16 @@ function compileVSSolution(folder, file, programName){ //todo, be able to select
             var r = prompt("Choose a configuration platform to compile: ");
 
             //geniunely no idea why this works, does prompt make it an integer already? if so, i know how this works
-            if(parseInt(r)){
+            if(parseInt(r) || r == "0"){
                 if(r > 0 && r <= sln.length){
                     config = configs[r-1];
                     platform = platforms[r-1];
                     validNum = true;
                 }    
+                else if(r == "0"){
+                    console.log(colorText(_yellow, "Skipping... (using the default might still work, if not, choose one for your system, there's a reason why this option is hidden)"));
+                    validNum = true;
+                }
                 else{
                     console.log(colorText(_red, "Choose a valid option!"));
                 }
@@ -463,7 +508,7 @@ function compileVSSolution(folder, file, programName){ //todo, be able to select
         }
 
         validNum = false;
-        var vsVer = 3;
+        var vsVer;
 
 
         console.log(colorText(_magenta, "[0] ") + colorText(_cyan, "Skip/Use default"));
@@ -541,7 +586,12 @@ function compileVSSolution(folder, file, programName){ //todo, be able to select
         
 
         ///p:WindowsTargetPlatformVersion=xx;WindowsTargetPlatformMinVersion=xx
-        exec("msbuild -t:restore " + " /p:WindowsTargetPlatformVersion=\"" + vssdk + "\";WindowsTargetPlatformMinVersion=\"" + vssdk  + "\" -p:RestorePackagesConfig=true /p:PlatformToolset=" + vsVer + " /property:Configuration=\"" + config + "\" /property:Platform=\"" + platform + "\" " + file, (error, stdout, stderr) => { //restore nuget pacakges (if needed)
+
+        var cp = config !== undefined ? " /property:Configuration=\"" + config + "\" /property:Platform=\"" + platform + "\" " : "";
+        var pt = vsVer !== undefined ? " /p:PlatformToolset=" + vsVer : "";
+        var sdk = vssdk !== undefined ? " /p:WindowsTargetPlatformVersion=\"" + vssdk + "\";WindowsTargetPlatformMinVersion=\"" + vssdk  + "\" " : "";
+
+        exec("msbuild -t:restore" + sdk + " -p:RestorePackagesConfig=true " + pt + cp + file, (error, stdout, stderr) => { //restore nuget pacakges (if needed)
             if (stderr) {
                 console.log(`${stderr}`);
             // return;
@@ -552,7 +602,7 @@ function compileVSSolution(folder, file, programName){ //todo, be able to select
                 console.log(colorText(_white, "Uh oh! The build failed! Most likely the .sln or any of the files that the .sln mentions has an error in it. It also might be an error due to not having MSBuild in your environment variables! Another common error is not having the right build tools installed, which you can install using the Visual Studio installer.", _bgRed));
                // return;
             }
-            exec("msbuild " + file + " /p:WindowsTargetPlatformVersion=\"" + vssdk + "\";WindowsTargetPlatformMinVersion=\"" + vssdk  + "\" /p:PlatformToolset=" + vsVer + " /property:Configuration=\"" + config + "\" /property:Platform=\"" + platform + "\"", (error, stdout, stderr) => {
+            exec("msbuild " + file + sdk + pt + cp, (error, stdout, stderr) => {
                 if (stderr) {
                     console.log(`${stderr}`);
                 // return;
@@ -681,7 +731,7 @@ function verifyScrypty(scryptyFile){ //so much verifying to do!
     
     var scrypty = parseScrypty(scryptyFile);
 
-    var info = scrypty.info; //not important for compilation or anything really, it just serves as a place to hold info, important when compiling by a scrypty file though
+    var info = scrypty.info; //not important for compilation or anything really, it just serves as a place to hold info, important when compiling by only a scrypty file though, if a user literally inputs a scrypty file to install
 
 
     //return codes:
@@ -799,12 +849,10 @@ function verifyScrypty(scryptyFile){ //so much verifying to do!
 
                 if(currentOS.method != "make" && currentOS.method != "cmake" && currentOS.method != "singleg++" && currentOS.method != "singlegcc" && currentOS.method != "gradle" && currentOS.method != "cmake" && currentOS.method != "maven" && currentOS.method != "vs" && currentOS.method != "nmake" && currentOS.method != "custom" && currentOS.method != "singlego" && currentOS.method != "singlejava"){
                     numOS--;
-                    console.log("down one")
                 }
 
                 if(currentOS.method == "custom"){
                     var goodCommands = 0;
-                    console.log(currentOS.commands.length);
                     for(var j = 0; j < currentOS.commands.length; j++){
                         if(currentOS.commands[j].cmd === undefined){
                             goodCommands--;
@@ -822,7 +870,7 @@ function verifyScrypty(scryptyFile){ //so much verifying to do!
 
     if(numOS == 0){
         console.error("Uh oh, the scrypty has no valid compilation instructions for your OS at all! But there still might be a way to compile, so continuing...");
-        return 2;
+        return 1;
     }
 
 }
@@ -885,7 +933,7 @@ function getFile(url){
 }
 
 
-download("https://github.com/xenia-project/xenia");
+download("https://github.com/xenia-project/dolphin");
 //compile("dolphin");
 
 
