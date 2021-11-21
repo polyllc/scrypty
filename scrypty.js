@@ -60,12 +60,12 @@ function getProgramNameFromURL(url){
 //a github repository installer/package installer (by zip link) & runner
 //-----------------------------
 //what scrpyty DOES do
-//  download git repo's
+//  download git repos
 //  download zip files and extracts
 //  reads scrypty files
 //  compiles by instruction on scrypty file
 //  finds a way to compile by the repo's files
-//  be able to run said repo's
+//  be able to run said repos
 //  run scripts as defined in a scripts folder of a repo or defined by the scrypty file
 //  delete repo's
 //what scrypty DOESN'T do
@@ -385,6 +385,10 @@ async function compileByMethod(method, scrypty, folder, programName, file = new 
                 await compileVSSolution(folder, file.get("vs"), programName);
             }
             break;
+
+        case "cmake":
+            await compileCmake(folder);
+            break;
         case "custom":
             compileCustom(folder, scrypty);
             break;
@@ -495,7 +499,7 @@ function compileVSSolution(folder, file, programName){
                     validNum = true;
                 }    
                 else if(r == "0"){
-                    console.log(colorText(_yellow, "Skipping... (using the default might still work, if not, choose one for your system, there's a reason why this option is hidden)"));
+                    console.log(colorText(_yellow, "Skipping... (using the default might still work, if not, choose one for your system, there's a reason why this option is hidden!)"));
                     validNum = true;
                 }
                 else{
@@ -622,6 +626,20 @@ function compileVSSolution(folder, file, programName){
                 }
             });
         });
+    });
+}
+
+function compileCmake(folder){
+    exec("cd " + folder + " && cmake ./build", (error, stdout, stderr) => {
+        if (error) {
+            console.log(`error: ${error.message}`);
+            return;
+        }
+        if (stderr) {
+            console.log(`${stderr}`);
+           // return;
+        }
+        console.log(`${stdout}`);
     });
 }
 
@@ -933,7 +951,7 @@ function getFile(url){
 }
 
 
-download("https://github.com/xenia-project/dolphin");
+download("https://github.com/xenia-project/yuzu");
 //compile("dolphin");
 
 
