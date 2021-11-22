@@ -137,7 +137,7 @@ async function compile(programName){
     //-singleg++  compile only one file, c++ with g++
     //-singlegcc  compile only one file, c with gcc
     //make       compile by make
-    //cmake      compile by cmake
+    //-cmake      compile by cmake
     //-vs         compile by visual studio
     //-singlego   compile only one file, go
     //singlejava compile only one file, java
@@ -387,7 +387,7 @@ async function compileByMethod(method, scrypty, folder, programName, file = new 
             break;
 
         case "cmake":
-            await compileCmake(folder);
+            compileCmake(folder, programName);
             break;
         case "custom":
             compileCustom(folder, scrypty);
@@ -629,18 +629,78 @@ function compileVSSolution(folder, file, programName){
     });
 }
 
-function compileCmake(folder){
-    exec("cd " + folder + " && cmake ./build", (error, stdout, stderr) => {
-        if (error) {
-            console.log(`error: ${error.message}`);
+function compileCmake(folder, programName){
+
+    console.log(colorText(_cyan, _bright + "[1]") + " Setup Build Environment (do this one first!)");
+    console.log(colorText(_cyan, _bright + "[2]") + " Build");
+    console.log(colorText(_cyan, _bright + "[3]") + " Install");
+
+    var validNum = false;
+    var option;
+    while(!validNum){
+       var r = prompt(colorText(_cyan, "Choose the CMake command to do. If this the first time you're seeing this prompt while installing this repo, then press 1 (setup build environment): "));
+
+
+        //geniunely no idea why this works, does prompt make it an integer already? if so, i know how this works
+        if(parseInt(r)){
+            if(r > 0 && r <= 3){
+                option = r;    
+                validNum = true;
+            }  
+            else{
+                console.log(colorText(_red, "Choose a valid option!"));
+            }
+        }
+        else{
+            console.log(colorText(_red, "Choose a valid option!!"));
+        }
+    }
+
+
+    switch(option){
+        case "1": exec("cd " + folder + " && cmake -S ./ -B ./build", (error, stdout, stderr) => {
+            if (error) {
+                console.log(`error: ${error.message}`);
+                return;
+            }
+            if (stderr) {
+                console.log(`${stderr}`);
+            // return;
+            }
+            console.log(`${stdout}`);
+            console.log(colorText(_green, "Created the build environment! Rescanning for new methods of compiling..."));
+            compile(programName);
             return;
-        }
-        if (stderr) {
-            console.log(`${stderr}`);
-           // return;
-        }
-        console.log(`${stdout}`);
-    });
+        }); break;
+        case "2": exec("cd " + folder + " && cmake --build ./", (error, stdout, stderr) => {
+            if (error) {
+                console.log(`error: ${error.message}`);
+                console.log(colorText(_white, "Uh oh! Seems like this repository can't be built with CMake (or something else happened). Try using a different method of compiling.", _bgRed));
+                return;
+            }
+            if (stderr) {
+                console.log(`${stderr}`);
+            // return;
+            }
+            console.log(`${stdout}`);
+            console.log(colorText(_green, "Build Complete!"));
+            return;
+        }); break;
+        case "3": exec("cd " + folder + " && cmake --install ./", (error, stdout, stderr) => {
+            if (error) {
+                console.log(`error: ${error.message}`);
+                console.log(colorText(_white, "Uh oh! Seems like this repository can't be installed with CMake (or something else happened). Try using a different method of compiling.", _bgRed));
+                return;
+            }
+            if (stderr) {
+                console.log(`${stderr}`);
+            // return;
+            }
+            console.log(`${stdout}`);
+            console.log(colorText(_green, "Install complete!"));
+            return;
+        });
+    }
 }
 
 
@@ -951,7 +1011,7 @@ function getFile(url){
 }
 
 
-download("https://github.com/xenia-project/yuzu");
+download("https://github.com/citra-emu/citra");
 //compile("dolphin");
 
 
