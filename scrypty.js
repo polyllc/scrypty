@@ -1,4 +1,4 @@
-const https = require("https");
+const http = require("http");
 const fs = require("fs");
 const request = require("request");
 const { exec } = require("child_process");
@@ -42,6 +42,38 @@ function colorText(color, str, bg = _bgBlack){
 }
 
 
+
+//server code
+/*
+function requestListener(req, res){
+    fs.readFile("index.html", (err, result) =>{
+        if(err) { console.error(err); return; }
+        res.setHeader("Content-Type", "text/html");
+        res.writeHead(200);
+        res.end(result);
+        console.log('read file');
+    });
+}
+
+const server = http.createServer(requestListener);
+
+server.on("connection", (stream) => {
+    console.log('new user');
+})
+
+
+server.listen(8080);
+*/
+
+
+//end server code
+
+
+
+
+
+
+
 function getProgramNameFromURL(url){
 
     //say url is https://github.com/polyllc/scrypty.git, we only want the scrypty part for the file folder
@@ -79,8 +111,11 @@ function getProgramNameFromURL(url){
 //todo
 //finish methods and compiling
 //add prerequisite checking (on scryptys)
-//add custom os installers
-//add custom commands on scryptys
+//check if compilers/builders are even available on the system
+//add help
+//add custom os installers (arch, debian, etc)
+//add custom run commands on scryptys
+//check if certain methods of compiling are even valid or if the tools are installed
 
 
 async function download(url){
@@ -146,7 +181,7 @@ async function compile(programName){
     //yarn       compile by yarn
     //npm        compile by npm (either by npm install in wdir or asking the user if they know that the package is available on npm already) (find package.json)
     //nmakevs    compile by visual studio's nmake
-    //custom     compile by custom commands defined in the scrypty file (maybe one day there'll be a scrypty server with scrypty files?)
+    //-custom     compile by custom commands defined in the scrypty file (maybe one day there'll be a scrypty server with scrypty files?)
     //autocustom compile by instructions found in readme (if all else fails!)
 
 
@@ -189,7 +224,8 @@ async function compile(programName){
             if(verifyScrypty(scryptyFile) != 2){
                 validScrypty = 1;
                 console.log("Verified scrypty!");
-                scrypty = parseScrypty(scryptyFile);
+                scrypty = parseScrypty(scryptyFile); 
+                //todo support multiple methods
                 methods.push(getMethod(scrypty)); //we always listen to scrypty file!
             }
     }
@@ -430,7 +466,7 @@ function compileSingleGCC(folder, file){ //todo, test it
 
 function compileSingleGo(folder, file){ //todo, test it
     console.log("Compiling file " + file + "...");
-    exec("go build " + folder + "\\" + file, (error, stdout, stderr) => {
+    exec("cd " + folder  + " && go build " + folder + "\\" + file, (error, stdout, stderr) => {
         if (error) {
             console.log(`error: ${error.message}`);
             return;
@@ -461,7 +497,7 @@ function compileVSSolution(folder, file, programName){
     var sln;
     fs.readFile(file, 'utf8', (err, data) => {
 
-        sln = data.substr(data.indexOf("GlobalSection(SolutionConfigurationPlatforms) = preSolution") + "GlobalSection(SolutionConfigurationPlatforms) = preSolution".length, data.substr(data.indexOf("GlobalSection(SolutionConfigurationPlatforms) = preSolution")).indexOf("EndGlobalSection"));
+        sln = data.substring(data.indexOf("GlobalSection(SolutionConfigurationPlatforms) = preSolution") + "GlobalSection(SolutionConfigurationPlatforms) = preSolution".length, data.substr(data.indexOf("GlobalSection(SolutionConfigurationPlatforms) = preSolution")).indexOf("EndGlobalSection"));
 
         sln = sln.split("\n");
         sln = sln.filter((element) => { return element.indexOf("|") != -1});
@@ -471,7 +507,7 @@ function compileVSSolution(folder, file, programName){
 
         for(var i = 0; i < sln.length; i++){
             sln[i] = sln[i].replaceAll('\r', '').replaceAll('\t', '');
-            sln[i] = sln[i].substr(0, sln[i].indexOf("=")-1); //to also get rid of the space before the =
+            sln[i] = sln[i].substring(0, sln[i].indexOf("=")-1); //to also get rid of the space before the =
             configs[i] = sln[i].split("|")[0];
             platforms[i] = sln[i].split("|")[1];
         }
@@ -595,7 +631,7 @@ function compileVSSolution(folder, file, programName){
         var pt = vsVer !== undefined ? " /p:PlatformToolset=" + vsVer : "";
         var sdk = vssdk !== undefined ? " /p:WindowsTargetPlatformVersion=\"" + vssdk + "\";WindowsTargetPlatformMinVersion=\"" + vssdk  + "\" " : "";
 
-        exec("msbuild -t:restore" + sdk + " -p:RestorePackagesConfig=true " + pt + cp + file, (error, stdout, stderr) => { //restore nuget pacakges (if needed)
+        exec("msbuild -t:restore" + sdk + " -p:RestorePackagesConfig=true " + pt + cp + file, {maxBuffer: 1024 * 4000}, (error, stdout, stderr) => { //restore nuget pacakges (if needed)
             if (stderr) {
                 console.log(`${stderr}`);
             // return;
@@ -606,7 +642,7 @@ function compileVSSolution(folder, file, programName){
                 console.log(colorText(_white, "Uh oh! The build failed! Most likely the .sln or any of the files that the .sln mentions has an error in it. It also might be an error due to not having MSBuild in your environment variables! Another common error is not having the right build tools installed, which you can install using the Visual Studio installer.", _bgRed));
                // return;
             }
-            exec("msbuild " + file + sdk + pt + cp, (error, stdout, stderr) => {
+            exec("msbuild " + file + sdk + pt + cp, {maxBuffer: 1024 * 4000}, (error, stdout, stderr) => {
                 if (stderr) {
                     console.log(`${stderr}`);
                 // return;
@@ -621,6 +657,7 @@ function compileVSSolution(folder, file, programName){
                     - Changing the Windows SDK version
                     - Choosing another .sln
                     - Making sure that you've set up the build environment (using something like cmake or whatever the repo says)
+                    - Install all of the prerequesits 
                     - If there are other options to compile, try those instead`, _bgRed));
                     return;
                 }
@@ -737,7 +774,7 @@ async function compileCustom(folder, scrypty){
     var len = getScryptyCommands(scrypty).length;
     var i = 0;
     console.log("running custom commands...");
-    while(len > i){
+    while(len > i){ //probably should await this...
         cmd = getScryptyCommands(scrypty)[i].cmd;
         console.log("command #" + (i+1) + ": " + cmd);
         exec(cmd, (error, stdout, stderr) => {
@@ -931,7 +968,7 @@ function verifyScrypty(scryptyFile){ //so much verifying to do!
 
                 if(currentOS.method == "custom"){
                     var goodCommands = 0;
-                    for(var j = 0; j < currentOS.commands.length; j++){
+                    for(var j = 0; j < currentOS.commands.length; j++){ //make sure all the commands are there
                         if(currentOS.commands[j].cmd === undefined){
                             goodCommands--;
                         }
@@ -1011,7 +1048,7 @@ function getFile(url){
 }
 
 
-download("https://github.com/citra-emu/citra");
+download("https://github.com/Kitware/CMake");
 //compile("dolphin");
 
 
@@ -1020,7 +1057,7 @@ async function gitDownload(url, programName){
 
     var folder = __dirname + "\\" + programName;
 
-    await fs.mkdir(folder, (err) => {
+    fs.mkdir(folder, (err) => {
         //  console.error(err); it just keeps saying that we've already made this directory so lets just comment this out for now
         return;
     });
@@ -1045,8 +1082,8 @@ async function zipDownload(programName, url) {
 
     var folder = __dirname + "\\" + programName;
 
-    await fs.mkdir(folder, (err) => {
-      //  console.error(err); it just keeps saying that we've already made this directory so lets just comment this out for now
+    fs.mkdir(folder, (err) => {
+        //  console.error(err); it just keeps saying that we've already made this directory so lets just comment this out for now
         return;
     });
 
