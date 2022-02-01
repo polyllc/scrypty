@@ -24,11 +24,11 @@
                 "vsSolution":"thing.sln",
                 "nmakeFile":"thing.nmake",
                 "prereq":[
-                    { "prereq":"g++" } 
+                    { "prereq":"g++", "testCommand":"g++ --help", "install":"install link here", "description":"description on how to install or something here" } 
                 ]
             },
             "win":{
-                "method":"vs",
+                "method":"cmake,vs",
                 "vsSolution":"solution.sln"
             },
             "mac":{
