@@ -222,16 +222,16 @@ async function compile(programName){
     //todo make that a map
     file.set("singleg++", "none");
 
-    if(findIfScrypty(files)){
+    if(s.findIfScrypty(files)){
             console.log("Found Scrypty file!");
             scryptyFile = folder + "\\" + files.find((element) => { return element.endsWith(".scrypty");} );
-            if(verifyScrypty(scryptyFile) != 2){
+            if(s.verifyScrypty(scryptyFile) == 0){
                 validScrypty = 1;
                 console.log("Verified scrypty!");
                 scrypty = s.parseScrypty(scryptyFile); 
                 //todo support multiple methods
                 methods.push(s.getMethod(scrypty)); //we always listen to scrypty file!
-                file.set(s.getMethod(scrypty), s.getScryptyFile(scrypty));
+                file.set(s.getMethod(scrypty));
             }
     }
     if(validScrypty == 0){
@@ -300,17 +300,20 @@ async function findMethods(folder, programName, methods) {
     var file = new Map();
     var vs = await findVSMethod(folder, programName);
     if (vs) {
+        console.log(colorText(_dim + _white, "Can compile by Visual Studio..."));
         file.set("vs", vs);
         methods.push("vs");
     }
 
     var cmake = await findIfCMake(folder);
     if(cmake){
+        console.log(colorText(_dim + _white, "Can compile by CMake..."));
         methods.push("cmake");
     }
 
     var cpp = await findIfCpp(folder, programName);
     if(cpp){
+        console.log(colorText(_dim + _white, "Can compile by G++..."));
         methods.push("singleg++");
         if(cpp != 1){
             file.set("singleg++", cpp);
@@ -324,25 +327,30 @@ async function findMethods(folder, programName, methods) {
 
 
 async function findIfCpp(folder, programName){
+    var file;
     //what to check:
     //1) if there's a main/projectname/index.cpp file
     //2) if a large proportion of the files are cpp (usually this means either a full on cpp project or most likely, compile by cmake or sln)
     //3) if there's literally only one file and it's a .cpp file
     var res = await getDirectories(__dirname + "\\" + programName);
     var cppfiles = res.filter((e) => {return e.endsWith(".cpp")});
+    console.log(folder + "\\" + programName + ".cpp");
 
-    if(fs.existsSync("main.cpp") || fs.existsSync(programName + ".cpp") || fs.existsSync("index.cpp")){
+    if(fs.existsSync(folder + "\\main.cpp") || fs.existsSync(folder + "\\" + programName + ".cpp") || fs.existsSync(folder + "\\index.cpp")){
         //probably a singlecpp, confirm later
-        return 1;
+        file = 1;
     }
-    if(cppfiles.length >= res.length/1.5){
+    if(cppfiles.length >= res.length/2){
         //worth a shot, right?
-        return 1;
+        file = 1;
     }
-    var nonCpp = res.filter((e) => {return e.endsWith(".cpp")});
-    if(nonCpp.length == 1){
-        return nonCpp[0];
+
+    if(cppfiles.length == 1){
+        file = cppfiles[0];
     }
+    return new Promise((resolve) => {
+        resolve(file);
+    });
 }
 
 async function findVSMethod(folder, programName){ //todo make it so if there's only one sln, just continue
@@ -430,10 +438,10 @@ async function compileByMethod(method, scrypty, folder, programName, file = new 
     switch(method){
         case "singleg++": 
         if(scrypty !== undefined){
-            compileSingleGPP(folder, getScryptyOS(scrypty).mainFile, ); break;
+            compileSingleGPP(folder, getScryptyOS(scrypty).mainFile, programName); break;
         }
         else {
-            compileSingleGPP(folder, file.get("singleg++")); break;
+            compileSingleGPP(folder, file.get("singleg++"), programName); break;
         }
         case "singlegcc": 
         if(scrypty !== undefined){
@@ -469,19 +477,20 @@ async function compileByMethod(method, scrypty, folder, programName, file = new 
 }
 
 function compileSingleGPP(folder, file, programName){
+    console.log(file);
     //what to check:
     //1) if there's a main/projectname/index.cpp file, if more than one, prompt user
     //2) if a large proportion of the files are cpp (usually this means either a full on cpp project or most likely, compile by cmake or sln), if so, prompt user that there's a fuck ton, and if they want to select one
-    if(file == "none"){ 
-        if(fs.existsSync("main.cpp") || fs.existsSync(programName + ".cpp") || fs.existsSync("index.cpp")){
+    if(file == "none" || file === undefined){ 
+        if(fs.existsSync(folder + "\\main.cpp") || fs.existsSync(folder + "\\" + programName + ".cpp") || fs.existsSync(folder + "\\index.cpp")){
             var files = [];
-            if(fs.existsSync("main.cpp")){
-                files.push("main.cpp");
+            if(fs.existsSync(folder + "\\main.cpp")){
+                files.push("\main.cpp");
             }
-            if(fs.existsSync(programName + ".cpp")){
+            if(fs.existsSync(folder + "\\" + programName + ".cpp")){
                 files.push(programName + ".cpp");
             }
-            if(fs.existsSync("index.cpp")){
+            if(fs.existsSync(folder + "\\index.cpp")){
                 files.push("index.cpp");
             }
             if(files.length > 1){
@@ -521,8 +530,11 @@ function compileSingleGPP(folder, file, programName){
             
         }
     }
+
+    //make sure to add c++ version too!
+
     console.log("Compiling file " + file + "...");
-    exec("g++ " + folder + "\\" + file + " -o " + folder + "\\" + file.substr(0, file.lastIndexOf(".")) + (os.platform() == "win32" ? ".exe" : ""), (error, stdout, stderr) => {
+    exec("g++ --std=c++17 " + folder + "\\" + file + " -o " + folder + "\\" + file.substr(0, file.lastIndexOf(".")) + (os.platform() == "win32" ? ".exe" : ""), (error, stdout, stderr) => {
         if (error) {
             console.log(`error: ${error.message}`);
             return;
@@ -585,7 +597,7 @@ function compileVSSolution(folder, file, programName){
     var sln;
     fs.readFile(file, 'utf8', (err, data) => {
 
-        sln = data.substring(data.indexOf("GlobalSection(SolutionConfigurationPlatforms) = preSolution") + "GlobalSection(SolutionConfigurationPlatforms) = preSolution".length, data.substr(data.indexOf("GlobalSection(SolutionConfigurationPlatforms) = preSolution")).indexOf("EndGlobalSection"));
+        sln = data.substr(data.indexOf("GlobalSection(SolutionConfigurationPlatforms) = preSolution") + "GlobalSection(SolutionConfigurationPlatforms) = preSolution".length, data.substr(data.indexOf("GlobalSection(SolutionConfigurationPlatforms) = preSolution")).indexOf("EndGlobalSection"));
 
         sln = sln.split("\n");
         sln = sln.filter((element) => { return element.indexOf("|") != -1});
@@ -595,7 +607,7 @@ function compileVSSolution(folder, file, programName){
 
         for(var i = 0; i < sln.length; i++){
             sln[i] = sln[i].replaceAll('\r', '').replaceAll('\t', '');
-            sln[i] = sln[i].substring(0, sln[i].indexOf("=")-1); //to also get rid of the space before the =
+            sln[i] = sln[i].substr(0, sln[i].indexOf("=")-1); //to also get rid of the space before the =
             configs[i] = sln[i].split("|")[0];
             platforms[i] = sln[i].split("|")[1];
         }
@@ -639,7 +651,7 @@ function compileVSSolution(folder, file, programName){
         var vsVer;
 
 
-        console.log(colorText(_magenta, "[0] ") + colorText(_cyan, "Skip/Use default"));
+        console.log(colorText(_magenta, "[0] ") + colorText(_yellow, "Skip/Use default"));
         console.log(colorText(_magenta, "[1] ") + colorText(_cyan, "Visual Studio 2017"));
         console.log(colorText(_magenta, "[2] ") + colorText(_cyan, "Visual Studio 2019"));
         console.log(colorText(_magenta, "[3] ") + colorText(_cyan, "Visual Studio 2022"));
@@ -849,8 +861,8 @@ async function compileCustom(folder, scrypty){
                 return 1;
             case "c":
                 console.log("Commands:");
-                for(var i = 0; i < getScryptyCommands(scrypty).length; i++){
-                    console.log(getScryptyCommands(scrypty)[i].cmd);
+                for(var i = 0; i < s.getScryptyCommands(scrypty).length; i++){
+                    console.log(s.getScryptyCommands(scrypty)[i].cmd);
                 }
                 break;
 
@@ -859,11 +871,11 @@ async function compileCustom(folder, scrypty){
     }
     
 
-    var len = getScryptyCommands(scrypty).length;
+    var len = s.getScryptyCommands(scrypty).length;
     var i = 0;
     console.log("running custom commands...");
     while(len > i){ //probably should await this...
-        cmd = getScryptyCommands(scrypty)[i].cmd;
+        cmd = s.getScryptyCommands(scrypty)[i].cmd;
         console.log("command #" + (i+1) + ": " + cmd);
         exec(cmd, (error, stdout, stderr) => {
             if (error) {
@@ -930,7 +942,7 @@ function getFile(url){
 }
 
 
-download("https://github.com/polyllc/progflows");
+download("https://github.com/citra-emu/citra");
 //compile("dolphin");
 
 

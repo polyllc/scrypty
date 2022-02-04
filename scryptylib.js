@@ -1,3 +1,40 @@
+const fs = require("fs");
+const os = require("os");
+
+
+const _black = "\x1b[30m";
+const _red = "\x1b[31m";
+const _green = "\x1b[32m";
+const _yellow = "\x1b[33m";
+const _blue = "\x1b[34m";
+const _magenta = "\x1b[35m";
+const _cyan = "\x1b[36m";
+const _white = "\x1b[37m";
+
+const _bgBlack = "\x1b[40m"
+const _bgRed = "\x1b[41m"
+const _bgGreen = "\x1b[42m"
+const _bgYellow = "\x1b[43m"
+const _bgBlue = "\x1b[44m"
+const _bgMagenta = "\x1b[45m"
+const _bgCyan = "\x1b[46m"
+const _bgWhite = "\x1b[47m"
+
+const _reset = "\x1b[0m"
+const _bright = "\x1b[1m"
+const _dim = "\x1b[2m"
+const _underscore = "\x1b[4m"
+const _blink = "\x1b[5m"
+const _reverse = "\x1b[7m"
+const _hidden = "\x1b[8m"
+
+function colorText(color, str, bg = _bgBlack){
+    return bg + color + str + _reset;
+}
+
+
+
+
 function getMethod(scrypty){
     switch(os.platform()){
         case "win32":  if(scrypty.compile.win != undefined){ return scrypty.compile.win.method; } break;
