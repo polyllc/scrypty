@@ -334,7 +334,6 @@ async function findIfCpp(folder, programName){
     //3) if there's literally only one file and it's a .cpp file
     var res = await getDirectories(__dirname + "\\" + programName);
     var cppfiles = res.filter((e) => {return e.endsWith(".cpp")});
-    console.log(folder + "\\" + programName + ".cpp");
 
     if(fs.existsSync(folder + "\\main.cpp") || fs.existsSync(folder + "\\" + programName + ".cpp") || fs.existsSync(folder + "\\index.cpp")){
         //probably a singlecpp, confirm later
@@ -345,8 +344,12 @@ async function findIfCpp(folder, programName){
         file = 1;
     }
 
+    if(fs.existsSync(folder + "\\" + programName + "\\main.cpp") || fs.existsSync(folder + "\\" + programName + "\\" + programName + ".cpp") || fs.existsSync(folder + "\\" + programName + "\\index.cpp")){
+        file = 2;
+    }
+
     if(cppfiles.length == 1){
-        file = cppfiles[0];
+        file = cppfiles[0].substring(cppfiles[0].lastIndexOf("/")+1, cppfiles[0].length);
     }
     return new Promise((resolve) => {
         resolve(file);
@@ -441,6 +444,9 @@ async function compileByMethod(method, scrypty, folder, programName, file = new 
             compileSingleGPP(folder, getScryptyOS(scrypty).mainFile, programName); break;
         }
         else {
+            if(file.get("singleg++") == 2){
+                folder += "\\" + programName;
+            }
             compileSingleGPP(folder, file.get("singleg++"), programName); break;
         }
         case "singlegcc": 
@@ -477,15 +483,14 @@ async function compileByMethod(method, scrypty, folder, programName, file = new 
 }
 
 function compileSingleGPP(folder, file, programName){
-    console.log(file);
     //what to check:
     //1) if there's a main/projectname/index.cpp file, if more than one, prompt user
     //2) if a large proportion of the files are cpp (usually this means either a full on cpp project or most likely, compile by cmake or sln), if so, prompt user that there's a fuck ton, and if they want to select one
-    if(file == "none" || file === undefined){ 
+    if(file == "none" || file === undefined || file == 2){ 
         if(fs.existsSync(folder + "\\main.cpp") || fs.existsSync(folder + "\\" + programName + ".cpp") || fs.existsSync(folder + "\\index.cpp")){
             var files = [];
             if(fs.existsSync(folder + "\\main.cpp")){
-                files.push("\main.cpp");
+                files.push("main.cpp");
             }
             if(fs.existsSync(folder + "\\" + programName + ".cpp")){
                 files.push(programName + ".cpp");
@@ -531,10 +536,43 @@ function compileSingleGPP(folder, file, programName){
         }
     }
 
-    //make sure to add c++ version too!
+
+    var cppVer;
+    console.log(colorText(_magenta, _bright + "[1] ") + "C++20");
+    console.log(colorText(_magenta, _bright + "[2] ") + "C++17");
+    console.log(colorText(_magenta, _bright + "[3] ") + "C++14");
+    console.log(colorText(_magenta, _bright + "[4] ") + "C++11");
+    console.log(colorText(_magenta, _bright + "[5] ") + "C++03");
+
+    while(!validNum){
+
+        var r = prompt(colorText(_green, _bright + "Choose the C++ version to use (if unsure, try C++17, and if that doesn't work, go down the chain. You can try using C++20, but it's so new, some compilers might not support it)"));
+
+        if(parseInt(r) || r == "0"){
+            if(r > 0 && r <= 5){
+                switch(r){
+                    case "1": cppVer = "c++20"; break;
+                    case "2": cppVer = "c++17"; break;
+                    case "3": cppVer = "c++14"; break;
+                    case "4": cppVer = "c++11"; break;
+                    case "5": cppVer = "c++03"; break;
+                }
+                validNum = true;
+            }    
+            //no skipping! you need to select something
+            else{
+                console.log(colorText(_red, "Choose a valid option!"));
+            }
+        }
+        else{
+            console.log(colorText(_red, "Choose a valid option!"));
+        }
+    }
+    //why would anyone use anything prior to 03 it's not like with c people use c98 all the time, right? right? uh oh
+
 
     console.log("Compiling file " + file + "...");
-    exec("g++ --std=c++17 " + folder + "\\" + file + " -o " + folder + "\\" + file.substr(0, file.lastIndexOf(".")) + (os.platform() == "win32" ? ".exe" : ""), (error, stdout, stderr) => {
+    exec("g++ --std=" + cppVer + " " + folder + "\\" + file + " -o " + folder + "\\" + file.substr(0, file.lastIndexOf(".")) + (os.platform() == "win32" ? ".exe" : ""), (error, stdout, stderr) => {
         if (error) {
             console.log(`error: ${error.message}`);
             return;
@@ -759,10 +797,17 @@ function compileVSSolution(folder, file, programName){
                     - Making sure that you've set up the build environment (using something like cmake or whatever the repo says)
                     - Install all of the prerequesits 
                     - If there are other options to compile, try those instead`, _bgRed));
-                    return;
+                }
+                else{
+                    return new Promise((resolve) =>{
+                        resolve(sln);
+                    });
                 }
             });
         });
+    });
+    return new Promise((resolve) =>{
+        resolve(sln);
     });
 }
 
@@ -942,7 +987,12 @@ function getFile(url){
 }
 
 
-download("https://github.com/citra-emu/citra");
+if(process.argv.length > 2){
+    download(process.argv[2]);
+}
+else{
+    download("https://github.com/RPCS3/rpcs3");
+}
 //compile("dolphin");
 
 
