@@ -38,6 +38,15 @@ const _blink = "\x1b[5m"
 const _reverse = "\x1b[7m"
 const _hidden = "\x1b[8m"
 
+var verbosity = 0;
+//-1, nothing but prompts
+//0, normal, prompts + build messages
+//1, prompts + build messages + extra warnings (such as scrypty not valid)
+//2, 1 and logs from finding files in compile methods and such
+//3, 2 and logs from compilebymethod logs (like file finding and matching)
+//4, literally log everything
+
+
 function colorText(color, str, bg = _bgBlack){
     return bg + color + str + _reset;
 }
@@ -100,7 +109,7 @@ function getProgramNameFromURL(url){
 //  finds a way to compile by the repo's files
 //  be able to run said repos
 //  run scripts as defined in a scripts folder of a repo or defined by the scrypty file
-//  delete repo's
+//  delete repos
 //what scrypty DOESN'T do
 //  be a package manager
 //  install new updates (unless fresh install by user request)
@@ -115,18 +124,24 @@ function getProgramNameFromURL(url){
 //check if compilers/builders are even available on the system
 //add help
 //add custom os installers (arch, debian, etc)
-//add custom run commands on scryptys
+//add custom run commands on scrypties
 //check if certain methods of compiling are even valid or if the tools are installed
 
 
 async function download(url){
 
+
     var programName = getProgramNameFromURL(url);
+    await s.setLogFile(programName + (new Date().getTime()/1000));
+
+    s.log("Downloading " + url);
+    s.log("Program name is " + programName);
 
     var fileToDownload = getFile(url);
 
     if(fileToDownload == "null"){
         console.log("Not a vaild url! Make sure it's a github link (to an actual repo) or a zip file link");
+        s.log("Url: " + url + " wasn't valid" , 4);
         return;
     }
 
@@ -135,14 +150,17 @@ async function download(url){
 
     if(fileToDownload.endsWith(".git")){
         await gitDownload(fileToDownload, programName);
+        s.log("Downloading by git");
          //burh async shit strikes again
     }
     else if(fileToDownload.endsWith(".zip")){
         console.log("Downloading zip file " + programName + ".zip...");
         await zipDownload(programName, fileToDownload);
+        s.log("Downloading zip file");
     }
     else{
         console.log("Not a vaild url! Make sure it's a github link (to an actual repo) or a zip file link");
+        s.log("Url: " + url + " wasn't valid" , 4);
         return;
     }
 
@@ -195,6 +213,7 @@ async function compile(programName){
     //check for maven file
     //check for package.json
     //check for vs .sln
+    //check for yarn.lock
     // ----- ok the obvious ones end here, down below are just (very educated) guesses that would make sense! -----
     //check if there are multiple files, find the one with file names that would make sense
     // like: main.cpp, {programname}.cpp, index.cpp, stuff like that
@@ -224,10 +243,12 @@ async function compile(programName){
 
     if(s.findIfScrypty(files)){
             console.log("Found Scrypty file!");
+            s.log("Found scrypty file");
             scryptyFile = folder + "\\" + files.find((element) => { return element.endsWith(".scrypty");} );
             if(s.verifyScrypty(scryptyFile) == 0){
                 validScrypty = 1;
                 console.log("Verified scrypty!");
+                s.log("Scrypty verified");
                 scrypty = s.parseScrypty(scryptyFile); 
                 //todo support multiple methods
                 methods.push(s.getMethod(scrypty)); //we always listen to scrypty file!
@@ -237,6 +258,7 @@ async function compile(programName){
     if(validScrypty == 0){
         if(os.hostname() == ("freebsd" || "aix" || "openbsd" || "android" || "sunos")){ //honestly no idea how I'm going to test this, well other than install each os in a vm
             console.error("Sorry! But scrypty doesn't support freebsd, aix, sunos, openbsd or android. Since there wasn't a scrypty file in this repository, you can't compile this using scrypty. The repository was still cloned into: " + folder);
+            s.log("Can't find compilation instructions for " + os.hostname() + " from scrypty file", 4);
             return;
         }
         //insert finding method code here (without scrypty)
@@ -248,12 +270,14 @@ async function compile(programName){
     //compile
     if(methods.length == 1){
         console.log(colorText(_black, "Compiling by " + methods[0], _bgWhite));
+        s.log("Compiling by " + methods[0], 2);
         compileByMethod(methods[0], scrypty, folder, programName, file);
         
     }
     else if(methods.length > 1){
         //insert code to find the best option (prompt user)
         console.log(colorText(_green, _bright + "Found more than one way to compile"));
+        s.log("More than one way to compile: " + methods);
         for(var i = 0; i < methods.length; i++){
             console.log(colorText(_cyan, _bright + "[" + (i+1) + "]") + " " + methods[i]);
         }
@@ -266,6 +290,7 @@ async function compile(programName){
             if(parseInt(r)){
                 if(r > 0 && r <= methods.length){
                     console.log(colorText(_black, "Compiling by " + methods[parseInt(r)-1], _bgWhite));
+                    s.log("Compiling by " + methods[parseInt(r)-1], 1);
                     compileByMethod(methods[parseInt(r)-1], scrypty, folder, programName, file);                    
                     validNum = true;
                 }  
@@ -280,6 +305,7 @@ async function compile(programName){
     }
     else{
         console.log("Couldn't find a way to compile this repository, make sure it's not a library or something that can't be compiled, or compile it yourself. The repository has been cloned into: " + folder);
+        s.log("Can't compile repository, no way found", 4);
         return;
     }
     
@@ -297,23 +323,30 @@ function getDirectories(src) {
 
 
 async function findMethods(folder, programName, methods) {
+    
     var file = new Map();
+    
+    //order of best compilation to worst
+    //cmake, often you need to create the build environment, so cmake should always be first
+    //vs sln, often after you make the build environment, a new sln pops up
+    //
+
+    var cmake = await findIfCMake(folder);
+    if(cmake){
+        s.log("Can compile by CMake...");
+        methods.push("cmake");
+    }
+
     var vs = await findVSMethod(folder, programName);
     if (vs) {
-        console.log(colorText(_dim + _white, "Can compile by Visual Studio..."));
+        s.log("Can compile by Visual Studio...");
         file.set("vs", vs);
         methods.push("vs");
     }
 
-    var cmake = await findIfCMake(folder);
-    if(cmake){
-        console.log(colorText(_dim + _white, "Can compile by CMake..."));
-        methods.push("cmake");
-    }
-
     var cpp = await findIfCpp(folder, programName);
     if(cpp){
-        console.log(colorText(_dim + _white, "Can compile by G++..."));
+        s.log("Can compile by G++...");
         methods.push("singleg++");
         if(cpp != 1){
             file.set("singleg++", cpp);
@@ -327,6 +360,7 @@ async function findMethods(folder, programName, methods) {
 
 
 async function findIfCpp(folder, programName){
+    //what we really hope, no one uses .cc or .cxx
     var file;
     //what to check:
     //1) if there's a main/projectname/index.cpp file
@@ -337,21 +371,25 @@ async function findIfCpp(folder, programName){
 
     if(fs.existsSync(folder + "\\main.cpp") || fs.existsSync(folder + "\\" + programName + ".cpp") || fs.existsSync(folder + "\\index.cpp")){
         //probably a singlecpp, confirm later
+        s.log("findIfCpp: Found a main/programname/index.cpp");
         file = 1;
     }
     if(cppfiles.length >= res.length/2){
         //worth a shot, right?
+        s.log("findIfCpp: more cpp files than half of the total number of files");
         file = 1;
     }
 
     if(fs.existsSync(folder + "\\" + programName + "\\main.cpp") || fs.existsSync(folder + "\\" + programName + "\\" + programName + ".cpp") || fs.existsSync(folder + "\\" + programName + "\\index.cpp")){
         file = 2;
+        s.log("findIfCpp: found a Found a main/programname/index.cpp in programname subfolder");
     }
 
     if(cppfiles.length == 1){
         file = cppfiles[0].substring(cppfiles[0].lastIndexOf("/")+1, cppfiles[0].length);
     }
     return new Promise((resolve) => {
+        s.log("File to compile by (if there is one): " + file);
         resolve(file);
     });
 }
@@ -371,7 +409,11 @@ async function findVSMethod(folder, programName){ //todo make it so if there's o
         if(slns.length == 0){
             return;
         }
-        console.log("Found solutions!")
+        console.log("Found solutions!");
+        s.log("Found " + preferredSlns.length + " preferred solutions and " + notPreferredSlns.length + " not preferred solutions");
+        s.log("Preferred Solutions: " + preferredSlns, 2);
+        s.log("Not Preferred Solutions: " + notPreferredSlns, 2);
+
         console.log(colorText(_black, _dim + "Choose a solution to compile (you can choose later if there are more methods to compile whether or not to compile by visual studio solutions)", _bgCyan));
         console.log("\n");
 
@@ -413,6 +455,7 @@ async function findVSMethod(folder, programName){ //todo make it so if there's o
                 }  
                 else if(r == "0"){
                     console.log(colorText(_red, "Not compiling by Visual Studio (skipped by user)"));
+                    s.log("Skipped compiling by sln");
                     validNum = true;
                 }  
                 else{
@@ -424,6 +467,7 @@ async function findVSMethod(folder, programName){ //todo make it so if there's o
             }
         }
     return new Promise((resolve) => {
+        s.log("Sln chosen: " + sln);
         resolve(sln);
     });
 }
@@ -482,7 +526,7 @@ async function compileByMethod(method, scrypty, folder, programName, file = new 
     console.log("Repository installed! Program is found in: " + folder + ". Run this program with `scrypty run " + programName + "`");
 }
 
-function compileSingleGPP(folder, file, programName){
+async function compileSingleGPP(folder, file, programName){
     //what to check:
     //1) if there's a main/projectname/index.cpp file, if more than one, prompt user
     //2) if a large proportion of the files are cpp (usually this means either a full on cpp project or most likely, compile by cmake or sln), if so, prompt user that there's a fuck ton, and if they want to select one
@@ -499,9 +543,9 @@ function compileSingleGPP(folder, file, programName){
                 files.push("index.cpp");
             }
             if(files.length > 1){
-                    console.log(colorText(_green, _bright + "Choose the .cpp file to compile by:"));
-                    for(var i = 0; i < notPreferredSlns.length; i++){
-                        console.log(colorText(_magenta, _bright + "[" + (i+1+files.length) + "]")  + " " + files[i]);
+                    console.log(colorText(_green, _bright + "Choose the .cpp file to compile:"));
+                    for(var i = 0; i < files.length; i++){
+                        console.log(colorText(_magenta, _bright + "[" + (i+1) + "]")  + " " + files[i]);
                     }
         
                 var r;
@@ -509,7 +553,7 @@ function compileSingleGPP(folder, file, programName){
                 var validNum = false;
         
                 while(!validNum){
-                    r = prompt("Choose solution by the number indicated next to each solution: ");
+                    r = prompt("Choose the .cpp file by typing in the number next to the file: ");
     
                     if(parseInt(r) || r == "0"){
                         if(r > 0 && r <= files.length){
@@ -518,6 +562,8 @@ function compileSingleGPP(folder, file, programName){
                         }  
                         else if(r == "0"){
                             console.log(colorText(_yellow, "Skipping... (I guess you really want to see all of the .cpp files, do you)"));
+                            file = "none";
+                            s.log("Skipped common cpp files");
                             validNum = true;
                         }  
                         else{
@@ -535,6 +581,39 @@ function compileSingleGPP(folder, file, programName){
             
         }
     }
+    if(file == "none" || file === undefined || file == 2){ //if we still have no file selected
+        files = await getDirectories(__dirname + "\\" + programName);
+        files = files.filter((e) => { return e.endsWith(".cpp"); });
+        for(var i = 0; i < files.length; i++){
+            files[i] = files[i].substring(files[i].lastIndexOf("/")+1, files[i].length);
+            files[i] = files[i].substring(files[i].lastIndexOf("\\")+1, files[i].length);
+        }
+        console.log(colorText(_green, _bright + "Choose the .cpp file to compile:"));
+            for(var i = 0; i < files.length; i++){
+                console.log(colorText(_magenta, _bright + "[" + (i+1) + "]")  + " " + files[i]);
+            }
+
+        var r;
+
+        var validNum = false;
+
+        while(!validNum){
+            r = prompt("Choose the .cpp file by typing in the number next to the file: ");
+
+            if(parseInt(r) || r == "0"){
+                if(r > 0 && r <= files.length){
+                    file = files[r-1];
+                    validNum = true;
+                }  
+                else{
+                    console.log(colorText(_red, "Choose a valid option! (you really need to choose an option, please of course)"));
+                }
+            }
+            else{
+                console.log(colorText(_red, "Choose a valid option!!"));
+            }
+        }
+    }
 
 
     var cppVer;
@@ -544,9 +623,12 @@ function compileSingleGPP(folder, file, programName){
     console.log(colorText(_magenta, _bright + "[4] ") + "C++11");
     console.log(colorText(_magenta, _bright + "[5] ") + "C++03");
 
+    var validNum = false; //i hate it when local variables become global, probably should be using typescript?!?!!? nah whatever this'll never not work :)
+    r = "";
+
     while(!validNum){
 
-        var r = prompt(colorText(_green, _bright + "Choose the C++ version to use (if unsure, try C++17, and if that doesn't work, go down the chain. You can try using C++20, but it's so new, some compilers might not support it)"));
+        var r = prompt(colorText(_green, _bright + "Choose the C++ version to use (if unsure, try C++17, and if that doesn't work, go down the chain. You can try using C++20, but it's so new, some compilers might not support it): "));
 
         if(parseInt(r) || r == "0"){
             if(r > 0 && r <= 5){
@@ -568,20 +650,24 @@ function compileSingleGPP(folder, file, programName){
             console.log(colorText(_red, "Choose a valid option!"));
         }
     }
-    //why would anyone use anything prior to 03 it's not like with c people use c98 all the time, right? right? uh oh
+    //why would anyone use anything prior to 03 it's not like with c people use c98 all the time, right? ....right? uh oh
 
 
-    console.log("Compiling file " + file + "...");
+    console.log("Compiling file " + file);
+    s.log("Compiling file " + file + "... cppVer: " + cppVer);
     exec("g++ --std=" + cppVer + " " + folder + "\\" + file + " -o " + folder + "\\" + file.substr(0, file.lastIndexOf(".")) + (os.platform() == "win32" ? ".exe" : ""), (error, stdout, stderr) => {
         if (error) {
             console.log(`error: ${error.message}`);
+            s.log(error, 4);
             return;
         }
         if (stderr) {
             console.log(`${stderr}`);
+            s.log(stderr, 4);
            // return;
         }
         console.log(`${stdout}`);
+        s.log(stdout, 2);
     });
 }
 
@@ -891,7 +977,7 @@ async function compileCustom(folder, scrypty){
 
     console.log("The scrypty file has set the compilation method to custom, which means custom commands are being executed. Make sure you trust the source before you continue.");
 
-
+    s.log("Custom commands: " + s.getScryptyCommands(scrypty), 2);
 
     var r = "";
 
@@ -903,6 +989,7 @@ async function compileCustom(folder, scrypty){
                 console.log(colorText(_green, "Continuing...")); break;
             case "n":
                 console.log(colorText(_red, "Not continuing... trying to find other ways to compile"));
+                s.log("Skipped custom");
                 return 1;
             case "c":
                 console.log("Commands:");
@@ -919,6 +1006,7 @@ async function compileCustom(folder, scrypty){
     var len = s.getScryptyCommands(scrypty).length;
     var i = 0;
     console.log("running custom commands...");
+    s.log("Running custom commands");
     while(len > i){ //probably should await this...
         cmd = s.getScryptyCommands(scrypty)[i].cmd;
         console.log("command #" + (i+1) + ": " + cmd);
@@ -991,7 +1079,7 @@ if(process.argv.length > 2){
     download(process.argv[2]);
 }
 else{
-    download("https://github.com/RPCS3/rpcs3");
+    download("https://github.com/RPCS3/progflow");
 }
 //compile("dolphin");
 
@@ -1003,22 +1091,28 @@ async function gitDownload(url, programName){
 
     fs.mkdir(folder, (err) => {
         //  console.error(err); it just keeps saying that we've already made this directory so lets just comment this out for now
+        s.log("Directory for program already exists, probably an accidental redownload or forceful recompile", 3);
         return;
     });
 
     console.log("Cloning into " + folder + "...");
+    s.log("Cloning into " + folder + "...");
 
     exec("git clone " + url + " " + folder + " --recursive", (error, stdout, stderr) => {
         if (error) {
             console.log(`error: ${error.message}`);
+            s.log(error, 4);
          //   return;
         }
         if (stderr) {
             console.log(`${stderr}`);
+            s.log(stderr, 3);
            // return;
         }
         console.log(`${stdout}`);
+        s.log(stdout, 2);
         compile(programName);
+        s.log("Starting to compile");
     });
 }
 
@@ -1036,15 +1130,18 @@ async function zipDownload(programName, url) {
         .pipe(fs.createWriteStream("./" + programName + "/" + url.substr(url.lastIndexOf("/")))) //create the zip file
         .on('finish', async () =>{
             console.log("unzipping...");
+            s.log("unzipping file");
             fs.createReadStream("./" + programName + "/" + url.substr(url.lastIndexOf("/"))) //unzip
             .pipe(unzipper.Extract({ path: './' + programName }));
              fs.unlink("./" + programName + "/" + url.substr(url.lastIndexOf("/")), (err) => {
                 if(err){
                     console.error(err);
+                    s.log(err, 4);
                     return;
                 }
                 console.log("compiling");
                 compile(programName);
+                s.log("Starting to compile");
              });
         });
 }

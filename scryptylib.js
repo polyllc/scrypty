@@ -28,6 +28,9 @@ const _blink = "\x1b[5m"
 const _reverse = "\x1b[7m"
 const _hidden = "\x1b[8m"
 
+
+var logfilename = "";
+
 function colorText(color, str, bg = _bgBlack){
     return bg + color + str + _reset;
 }
@@ -259,6 +262,48 @@ function parseScrypty(file){
     return JSON.parse(fs.readFileSync(file).toString()); //its literally just a json.parse, but saying parseScrypty sounds so much better :)
 }
 
+function getLogFile(){
+    if(logfilename === undefined ||  logfilename == ""){
+        return new Date().getTime()/1000;
+    }
+    else{
+        return logfilename;
+    }
+}
+
+function setLogFile(filename){
+    logfilename = filename;
+    return new Promise((resolve) =>{
+        resolve(logfilename);
+    }); //literally just so we can await
+}
+
+function log(message, severity = 1){
+    var file = getLogFile();
+
+    var logstr;
+    var date = new Date().toLocaleTimeString();
+    switch(severity){
+        case 1: logstr = "[LOG " + date + "] "  + message; break;
+        case 2: logstr = "[INFO " + date + "] "  + message; break;
+        case 3: logstr = "[WARNING " + date + "] "  + message; break;
+        case 4: logstr = "[ERROR " + date + "] "  + message; break;
+    }
+    fs.appendFile(__dirname + "\\scryptyLogs\\" + file + ".scryptylog", logstr + "\n", (err) => {
+        if (err) throw err;
+    });
+    //severity logs
+    //1 is normal log
+    //2 is info log
+    //3 is warning log
+    //4 is error log
+
+}
+
+function logBoth(message, severity = 1){
+    console.log(message);
+    log(message, severity);
+}
 
 exports.parseScrypty = parseScrypty;
 exports.findIfScrypty = findIfScrypty;
@@ -267,3 +312,6 @@ exports.getMethod = getMethod;
 exports.getScryptyCommands = getScryptyCommands;
 exports.getScryptyOS = getScryptyOS;
 exports.getScryptyFile = getScryptyFile;
+exports.log = log;
+exports.setLogFile = setLogFile;
+exports.logBoth = logBoth;
