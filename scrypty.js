@@ -121,6 +121,7 @@ function getProgramNameFromURL(url){
 //todo
 //finish methods and compiling
 //add prerequisite checking (on scryptys)
+//add prerequisite installing
 //check if compilers/builders are even available on the system
 //add help
 //add custom os installers (arch, debian, etc)
@@ -231,7 +232,7 @@ async function compile(programName){
     var scryptyFile = "none";
     var scrypty;
 
-    var folder = __dirname + "\\" + programName;
+    var folder = workingDir;
 
     var files = fs.readdirSync(folder);
 
@@ -353,11 +354,21 @@ async function findMethods(folder, programName, methods) {
         }
     }
 
+    var gradle = findIfGradle(folder);
+    if(gradle){
+        s.log("Can compile by gradle...");
+        methods.push("gradle");
+    }
+
     return new Promise((resolve) => {
         resolve(file); //some methods don't return files, so we just return undefined, and thats ok because compileByMethod wont even access file if its not needed
     });
 }
 
+
+function findIfGradle(folder){
+    return fs.existsSync(folder + "/build.gradle");
+}
 
 async function findIfCpp(folder, programName){
     //what we really hope, no one uses .cc or .cxx
@@ -389,7 +400,7 @@ async function findIfCpp(folder, programName){
         file = cppfiles[0].substring(cppfiles[0].lastIndexOf("/")+1, cppfiles[0].length);
     }
     return new Promise((resolve) => {
-        s.log("File to compile by (if there is one): " + file);
+        s.log("findIfCpp: File to compile by (if there is one): " + file);
         resolve(file);
     });
 }
@@ -409,6 +420,7 @@ async function findVSMethod(folder, programName){ //todo make it so if there's o
         if(slns.length == 0){
             return;
         }
+        //todo, separate vcxproj from slns by listing separate by user choice
         console.log("Found solutions!");
         s.log("Found " + preferredSlns.length + " preferred solutions and " + notPreferredSlns.length + " not preferred solutions");
         s.log("Preferred Solutions: " + preferredSlns, 2);
@@ -439,7 +451,8 @@ async function findVSMethod(folder, programName){ //todo make it so if there's o
         var validNum = false;
 
         while(!validNum){
-            r = prompt("Choose solution by the number indicated next to each solution: ");
+            console.log("Choose solution by the number indicated next to each solution");
+            r = prompt("Type in '+' for more options:");
 
 
             //geniunely no idea why this works, does prompt make it an integer already? if so, i know how this works
@@ -461,6 +474,34 @@ async function findVSMethod(folder, programName){ //todo make it so if there's o
                 else{
                     console.log(colorText(_red, "Choose a valid option!"));
                 }
+            }
+            else if(r.toLowerCase() == "+"){
+                console.log(colorText(_green, "Showing more options..."));
+                slns = res.filter((element) => { return element.endsWith(".sln") || element.endsWith(".vcxproj"); });
+                preferredSlns = slns.filter((element) => { return (element.toLowerCase().substr(element.lastIndexOf("/")).indexOf(programName) != -1) ?  element : "" }); //the preferred sln is the slns in the array with the programName in the file name
+                notPreferredSlns = slns.filter((element) => { return (element.toLowerCase().substr(element.lastIndexOf("/")).indexOf(programName) == -1) ?  element : "" }); //to filter out the rest
+        
+                if(slns.length == 0){
+                    return;
+                }
+                s.log("Found " + preferredSlns.length + " preferred solutions and " + notPreferredSlns.length + " not preferred solutions");
+                s.log("Preferred Solutions: " + preferredSlns, 2);
+                s.log("Not Preferred Solutions: " + notPreferredSlns, 2);
+                if(preferredSlns.length != 0){
+                    console.log(colorText(_green, _bright + "These solutions are the better option to choose from (because they have the repo's name in the file name)"));
+                    for(var i = 0; i < preferredSlns.length; i++){
+                        console.log(colorText(_magenta, _bright + "[" + (i+1) + "]")  + " " + preferredSlns[i]);
+                    }
+                }
+                console.log("\n");
+                if(notPreferredSlns.length != 0){
+                    console.log(colorText(_yellow, _bright + "Other solutions (might still be viable!)"));
+                    for(var i = 0; i < notPreferredSlns.length; i++){
+                        console.log(colorText(_magenta, _bright + "[" + (i+1+preferredSlns.length) + "]")  + " " + notPreferredSlns[i]);
+                    }
+                }
+        
+        
             }
             else{
                 console.log(colorText(_red, "Choose a valid option!!"));
@@ -542,6 +583,7 @@ async function compileSingleGPP(folder, file, programName){
             if(fs.existsSync(folder + "\\index.cpp")){
                 files.push("index.cpp");
             }
+            s.log(files + " exist of prenamed files", 2);
             if(files.length > 1){
                     console.log(colorText(_green, _bright + "Choose the .cpp file to compile:"));
                     for(var i = 0; i < files.length; i++){
@@ -674,6 +716,7 @@ async function compileSingleGPP(folder, file, programName){
 
 function compileSingleGCC(folder, file){ //todo, test it
     console.log("Compiling file " + file + "...");
+    s.log("Compiling file " + file + "...");
     exec("gcc " + folder + "\\" + file + " -o " + folder + "\\" + file.substr(0, file.lastIndexOf(".")) + (os.platform() == "win32" ? ".exe" : ""), (error, stdout, stderr) => {
         if (error) {
             console.log(`error: ${error.message}`);
@@ -690,6 +733,7 @@ function compileSingleGCC(folder, file){ //todo, test it
 
 function compileSingleGo(folder, file){ //todo, test it
     console.log("Compiling file " + file + "...");
+    s.log("Compiling file " + file + "...");
     exec("cd " + folder  + " && go build " + folder + "\\" + file, (error, stdout, stderr) => {
         if (error) {
             console.log(`error: ${error.message}`);
@@ -705,6 +749,7 @@ function compileSingleGo(folder, file){ //todo, test it
 
 function compileVSSolution(folder, file, programName){
     console.log(colorText(_magenta, "Compiling solution..."));
+    s.log("Compiling solution " + file + "...");
 
 
 
@@ -717,13 +762,48 @@ function compileVSSolution(folder, file, programName){
 		Release|Any CPU = Release|Any CPU
 	EndGlobalSection
 
+
+    and for vcxproj:
+    
+      <ItemGroup Label="ProjectConfigurations">
+            <ProjectConfiguration Include="Debug|x64">
+            <Configuration>Debug</Configuration>
+            <Platform>x64</Platform>
+            </ProjectConfiguration>
+            <ProjectConfiguration Include="Release|x64">
+            <Configuration>Release</Configuration>
+            <Platform>x64</Platform>
+            </ProjectConfiguration>
+        </ItemGroup>
     */
-    var sln;
+    var sln = [];
     fs.readFile(file, 'utf8', (err, data) => {
 
-        sln = data.substr(data.indexOf("GlobalSection(SolutionConfigurationPlatforms) = preSolution") + "GlobalSection(SolutionConfigurationPlatforms) = preSolution".length, data.substr(data.indexOf("GlobalSection(SolutionConfigurationPlatforms) = preSolution")).indexOf("EndGlobalSection"));
+        if(file.endsWith(".sln")){
+            sln = data.substr(data.indexOf("GlobalSection(SolutionConfigurationPlatforms) = preSolution") + "GlobalSection(SolutionConfigurationPlatforms) = preSolution".length, data.substr(data.indexOf("GlobalSection(SolutionConfigurationPlatforms) = preSolution")).indexOf("EndGlobalSection"));
+            sln = sln.split("\n");
+        }
+        else{
+            var foundConfigPlatform = true;
+            var newData = data;
+            while(foundConfigPlatform){
+                if(newData.indexOf("<ProjectConfiguration Include=\"") != -1){
+                    newData = newData.substring(newData.indexOf("<ProjectConfiguration Include=\"")+"<ProjectConfiguration Include=\"".length, newData.length);
+                    var configPlatform = newData.substring(0, newData.indexOf("\""));
+                    if(!sln.includes(configPlatform)){
+                        sln.push(configPlatform);
+                    }
+                    else{
+                        foundConfigPlatform = false; 
+                    }
+                    newData = newData.substring(newData.indexOf("\""), newData.length);
+                } 
+                else{
+                    foundConfigPlatform = false;
+                }
+            }
+        }
 
-        sln = sln.split("\n");
         sln = sln.filter((element) => { return element.indexOf("|") != -1});
 
         var configs = [];
@@ -731,7 +811,7 @@ function compileVSSolution(folder, file, programName){
 
         for(var i = 0; i < sln.length; i++){
             sln[i] = sln[i].replaceAll('\r', '').replaceAll('\t', '');
-            sln[i] = sln[i].substr(0, sln[i].indexOf("=")-1); //to also get rid of the space before the =
+            sln[i] = sln[i].substr(0, sln[i].indexOf("=") != -1 ? sln[i].indexOf("=")-1 : sln[i].length); //to also get rid of the space before the =
             configs[i] = sln[i].split("|")[0];
             platforms[i] = sln[i].split("|")[1];
         }
@@ -757,9 +837,11 @@ function compileVSSolution(folder, file, programName){
                     config = configs[r-1];
                     platform = platforms[r-1];
                     validNum = true;
+                    s.log("Chose config " + config + ", platform " + platform);
                 }    
                 else if(r == "0"){
                     console.log(colorText(_yellow, "Skipping... (using the default might still work, if not, choose one for your system, there's a reason why this option is hidden!)"));
+                    s.log("Skipped config platform", 2);
                     validNum = true;
                 }
                 else{
@@ -792,9 +874,11 @@ function compileVSSolution(folder, file, programName){
                         case "3": vsVer = "v143"; break;
                     }
                     validNum = true;
+                    s.log("Chose vsVer " + vsVer, 2);
                 }    
                 else if(r == "0"){
                     console.log(colorText(_green, "Skipping..."));
+                    s.log("Skipped vsVer", 2);
                     validNum = true;
                 }
                 else{
@@ -834,9 +918,11 @@ function compileVSSolution(folder, file, programName){
                         case "6": vssdk = "10.0.22000.0"; break;
                     }
                     validNum = true;
+                    s.log("Chose sdk " + vssdk, 2);
                 }    
                 else if(r == "0"){
                     console.log(colorText(_green, "Skipping..."));
+                    s.log("Skipped sdk", 2);
                     validNum = true;
                 }
                 else{
@@ -858,22 +944,29 @@ function compileVSSolution(folder, file, programName){
         exec("msbuild -t:restore" + sdk + " -p:RestorePackagesConfig=true " + pt + cp + " " + file, {maxBuffer: 1024 * 4000}, (error, stdout, stderr) => { //restore nuget pacakges (if needed)
             if (stderr) {
                 console.log(`${stderr}`);
+                s.log("restore stderr: " + stderr, 4);
             // return;
             }
             console.log(`${stdout}`);
+            s.log("restore stdout: " + stdout, 2);
             if (error) {
                 console.log(`error: ${error.message}`);
+                s.log("restore error: ", 4);
                 console.log(colorText(_white, "Uh oh! The build might have failed, but sometimes this part is irrelevant anyways, so continuing", _bgMagenta));
                // return;
             }
+           
             exec("msbuild " + file + sdk + pt + cp, {maxBuffer: 1024 * 4000}, (error, stdout, stderr) => {
                 if (stderr) {
                     console.log(`${stderr}`);
+                    s.log("sln build stderr: " + stderr, 4);
                 // return;
                 }
                 console.log(`${stdout}`);
+                    s.log("sln build stdout: " + stdout, 2);
                 if (error) {
                     console.log(`error: ${error.message}`);
+                    s.log("sln build error: " + error, 4);
                     console.log(colorText(_white, `Uh oh! The build failed! Most likely the .sln or any of the files that the .sln mentions has an error in it. It also might be an error due to not having MSBuild in your environment variables! Another common error is not having the right build tools installed, which you can install using the Visual Studio installer.
                     You can also try these things:
                     - Changing the build tools version (visual studio version option)
@@ -914,6 +1007,7 @@ function compileCmake(folder, programName){
             if(r > 0 && r <= 3){
                 option = r;    
                 validNum = true;
+                s.log("compileCmake, Chose " + r);
             }  
             else{
                 console.log(colorText(_red, "Choose a valid option!"));
@@ -929,13 +1023,16 @@ function compileCmake(folder, programName){
         case "1": exec("cd " + folder + " && cmake -S ./ -B ./build", (error, stdout, stderr) => {
             if (error) {
                 console.log(`error: ${error.message}`);
+                s.log("CMake environment build error: " + error, 4);
                 return;
             }
             if (stderr) {
                 console.log(`${stderr}`);
+                s.log("CMake environment build stderr: " + stderr, 4);
             // return;
             }
             console.log(`${stdout}`);
+            s.log("CMake environment build stdout: " + stdout, 2);
             console.log(colorText(_green, "Created the build environment! Rescanning for new methods of compiling..."));
             compile(programName);
             return;
@@ -943,27 +1040,33 @@ function compileCmake(folder, programName){
         case "2": exec("cd " + folder + " && cmake --build ./", (error, stdout, stderr) => {
             if (error) {
                 console.log(`error: ${error.message}`);
+                s.log("CMake build error: " + error, 4);
                 console.log(colorText(_white, "Uh oh! Seems like this repository can't be built with CMake (or something else happened). Try using a different method of compiling.", _bgRed));
                 return;
             }
             if (stderr) {
                 console.log(`${stderr}`);
+                s.log("CMake build stderr: " + stderr, 4);
             // return;
             }
+            s.log("CMake build stdout: " + stdout, 2);
             console.log(`${stdout}`);
             console.log(colorText(_green, "Build Complete!"));
             return;
         }); break;
         case "3": exec("cd " + folder + " && cmake --install ./", (error, stdout, stderr) => {
             if (error) {
+                s.log("CMake install error: " + error, 4);
                 console.log(`error: ${error.message}`);
                 console.log(colorText(_white, "Uh oh! Seems like this repository can't be installed with CMake (or something else happened). Try using a different method of compiling.", _bgRed));
                 return;
             }
             if (stderr) {
+                s.log("CMake install stderr: " + stderr, 4);
                 console.log(`${stderr}`);
             // return;
             }
+            s.log("CMake install stdout: " + stdout, 2);
             console.log(`${stdout}`);
             console.log(colorText(_green, "Install complete!"));
             return;

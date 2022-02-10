@@ -282,7 +282,7 @@ function log(message, severity = 1){
     var file = getLogFile();
 
     var logstr;
-    var date = new Date().toLocaleTimeString();
+    var date = new Date().toLocaleTimeString("en-GB");
     switch(severity){
         case 1: logstr = "[LOG " + date + "] "  + message; break;
         case 2: logstr = "[INFO " + date + "] "  + message; break;
