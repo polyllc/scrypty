@@ -29,7 +29,7 @@ const _reverse = "\x1b[7m"
 const _hidden = "\x1b[8m"
 
 
-var logfilename = "";
+let logfilename = "";
 
 function colorText(color, str, bg = _bgBlack){
     return bg + color + str + _reset;
@@ -105,9 +105,9 @@ function getScryptyFile(scrypty){ //gets the compile data from scrypty file by o
 
 function verifyScrypty(scryptyFile){ //so much verifying to do!
     
-    var scrypty = parseScrypty(scryptyFile);
+    let scrypty = parseScrypty(scryptyFile);
 
-    var info = scrypty.info; //not important for compilation or anything really, it just serves as a place to hold info, important when compiling by only a scrypty file though, if a user literally inputs a scrypty file to install
+    let info = scrypty.info; //not important for compilation or anything really, it just serves as a place to hold info, important when compiling by only a scrypty file though, if a user literally inputs a scrypty file to install
 
 
     //return codes:
@@ -115,7 +115,7 @@ function verifyScrypty(scryptyFile){ //so much verifying to do!
     //1 continue to compile with other methods, scrypty file is not formatted correctly or portions are missing
     //2 unsupported os that doesn't have scrypty instructions on how to compile
 
-    var compile = scrypty.compile;
+    let compile = scrypty.compile;
     if(scrypty.compile === undefined){
         console.error("\x1b[31m%s\x1b[0m", "Uh oh, the compile portion of the scrypty file is missing! Cannot use this scrypty to compile...");
         return 1;
@@ -174,11 +174,11 @@ function verifyScrypty(scryptyFile){ //so much verifying to do!
     }
     
 
-    var numOS = 0; //we need to check to make sure there's at least on compile instruction per scrypty file
+    let numOS = 0; //we need to check to make sure there's at least on compile instruction per scrypty file
 
-    for(var i = 0; i < 9; i++){ //since I don't want to repeat the same code for all 3 os's, we just loop through them
-        var currentOS;
-        var currentOSStr;
+    for(let i = 0; i < 9; i++){ //since I don't want to repeat the same code for all 3 os's, we just loop through them
+        let currentOS;
+        let currentOSStr;
 
         switch(i){ 
             case 0: currentOS = scrypty.compile.win; currentOSStr = "win32"; break;
@@ -228,8 +228,8 @@ function verifyScrypty(scryptyFile){ //so much verifying to do!
                 }
 
                 if(currentOS.method == "custom"){
-                    var goodCommands = 0;
-                    for(var j = 0; j < currentOS.commands.length; j++){ //make sure all the commands are there
+                    let goodCommands = 0;
+                    for(let j = 0; j < currentOS.commands.length; j++){ //make sure all the commands are there
                         if(currentOS.commands[j].cmd === undefined){
                             goodCommands--;
                         }
@@ -279,10 +279,10 @@ function setLogFile(filename){
 }
 
 function log(message, severity = 1){
-    var file = getLogFile();
+    let file = getLogFile();
 
-    var logstr;
-    var date = new Date().toLocaleTimeString("en-GB");
+    let logstr;
+    let date = new Date().toLocaleTimeString("en-GB"); //yessir, day month year
     switch(severity){
         case 1: logstr = "[LOG " + date + "] "  + message; break;
         case 2: logstr = "[INFO " + date + "] "  + message; break;
@@ -305,6 +305,11 @@ function logBoth(message, severity = 1){
     log(message, severity);
 }
 
+function clearLine(){
+    process.stdout.clearLine();
+    process.stdout.cursorTo(0); 
+}
+
 exports.parseScrypty = parseScrypty;
 exports.findIfScrypty = findIfScrypty;
 exports.verifyScrypty = verifyScrypty;
@@ -315,3 +320,4 @@ exports.getScryptyFile = getScryptyFile;
 exports.log = log;
 exports.setLogFile = setLogFile;
 exports.logBoth = logBoth;
+exports.clearLine = clearLine;

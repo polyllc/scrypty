@@ -4,11 +4,13 @@ const request = require("request");
 const { exec } = require("child_process");
 const unzipper = require("unzipper");
 const os = require("os");
-var prompt = require("prompt-sync")();
+let prompt = require("prompt-sync")();
 const glob = require("glob");
 const s = require("./scryptylib");
+const util = require('util');
+const execP = util.promisify(require('child_process').exec);
 
-
+const scryptyVersion = "v0.0.26";
 
 //color defines
 
@@ -38,7 +40,10 @@ const _blink = "\x1b[5m"
 const _reverse = "\x1b[7m"
 const _hidden = "\x1b[8m"
 
-var verbosity = 0;
+let methodNames = ["g++", "gcc", "Visual Studio", "java", "go", "cmake", "make"];
+let methodCommands = ["g++ --help", "gcc --help", "msbuild -help", "javac -help", "go help", "cmake", "make"];
+
+let verbosity = 0;
 //-1, nothing but prompts
 //0, normal, prompts + build messages
 //1, prompts + build messages + extra warnings (such as scrypty not valid)
@@ -92,7 +97,7 @@ function getProgramNameFromURL(url){
     }
     if(url.startsWith("https://github.com") || url.startsWith("http://github.com") || url.startsWith("github.com")){
         //not the first slash, but after the 2nd slash and before the 3rd slash is the name of the repo
-        var firstSlash = url.indexOf("/", 8);
+        let firstSlash = url.indexOf("/", 8);
         return url.substr(url.indexOf("/", firstSlash+1)+1, (url.indexOf("/", url.indexOf("/", firstSlash+1)+1) == -1 ? url.length : url.indexOf("/", url.indexOf("/", firstSlash+1)+1)) - url.indexOf("/", firstSlash+1) - 1); //its 8 so we skip the /'s from https://
     }
 }
@@ -132,13 +137,27 @@ function getProgramNameFromURL(url){
 async function download(url){
 
 
-    var programName = getProgramNameFromURL(url);
+    let programName = getProgramNameFromURL(url);
     await s.setLogFile(programName + (new Date().getTime()/1000));
 
+    s.log("Using Scrypty " + scryptyVersion);
     s.log("Downloading " + url);
     s.log("Program name is " + programName);
+    await checkPrerequisitesPromises().then((results) => { //instead of making the function actually print out if it fails or not, we do this because otherwise we would somehow need to make that other function return a promise, and await inside a function that's called by a function that isn't await doens't work
+        let i = 0;
+        results.forEach((result) => {
+            if(result.value){ //meaning command failed
+                console.log(colorText(_red, methodNames[i] + " not found"));
+            }
+            else{
+                console.log(colorText(_green, methodNames[i] + " found"))
+            }
+            i++;
+        });
+    });
+    
 
-    var fileToDownload = getFile(url);
+    let fileToDownload = getFile(url);
 
     if(fileToDownload == "null"){
         console.log("Not a vaild url! Make sure it's a github link (to an actual repo) or a zip file link");
@@ -146,7 +165,6 @@ async function download(url){
         return;
     }
 
-    console.log(programName);
 
 
     if(fileToDownload.endsWith(".git")){
@@ -172,7 +190,7 @@ async function download(url){
 
 
 async function compile(programName){
-    var workingDir = findWorkingDir(programName);
+    let workingDir = findWorkingDir(programName);
    
 
     //stuff to find:
@@ -227,19 +245,18 @@ async function compile(programName){
 
 
 
-    var methods = []; //the methods of compilation, the earlier in the array, the better method of compilation, we still ask the user, but inform them which one is the better option
+    let methods = []; //the methods of compilation, the earlier in the array, the better method of compilation, we still ask the user, but inform them which one is the better option
 
-    var scryptyFile = "none";
-    var scrypty;
+    let scryptyFile = "none";
+    let scrypty;
 
-    var folder = workingDir;
+    let folder = workingDir;
 
-    var files = fs.readdirSync(folder);
+    let files = fs.readdirSync(folder);
 
-    var validScrypty = 0;
+    let validScrypty = 0;
 
-    var file = new Map(); //for the file to compile/build off of (like the main .cpp, the .sln, etc)
-    //todo make that a map
+    let file = new Map(); //for the file to compile/build off of (like the main .cpp, the .sln, etc)
     file.set("singleg++", "none");
 
     if(s.findIfScrypty(files)){
@@ -279,12 +296,12 @@ async function compile(programName){
         //insert code to find the best option (prompt user)
         console.log(colorText(_green, _bright + "Found more than one way to compile"));
         s.log("More than one way to compile: " + methods);
-        for(var i = 0; i < methods.length; i++){
+        for(let i = 0; i < methods.length; i++){
             console.log(colorText(_cyan, _bright + "[" + (i+1) + "]") + " " + methods[i]);
         }
-        var validNum = false;
+        let validNum = false;
         while(!validNum){
-           var r = prompt("Choose the way you want to compile: ");
+           let r = prompt("Choose the way you want to compile: ");
 
 
             //geniunely no idea why this works, does prompt make it an integer already? if so, i know how this works
@@ -325,27 +342,27 @@ function getDirectories(src) {
 
 async function findMethods(folder, programName, methods) {
     
-    var file = new Map();
+    let file = new Map();
     
     //order of best compilation to worst
     //cmake, often you need to create the build environment, so cmake should always be first
     //vs sln, often after you make the build environment, a new sln pops up
     //
 
-    var cmake = await findIfCMake(folder);
+    let cmake = await findIfCMake(folder);
     if(cmake){
         s.log("Can compile by CMake...");
         methods.push("cmake");
     }
 
-    var vs = await findVSMethod(folder, programName);
+    let vs = await findVSMethod(folder, programName);
     if (vs) {
         s.log("Can compile by Visual Studio...");
         file.set("vs", vs);
         methods.push("vs");
     }
 
-    var cpp = await findIfCpp(folder, programName);
+    let cpp = await findIfCpp(folder, programName);
     if(cpp){
         s.log("Can compile by G++...");
         methods.push("singleg++");
@@ -354,7 +371,7 @@ async function findMethods(folder, programName, methods) {
         }
     }
 
-    var gradle = findIfGradle(folder);
+    let gradle = findIfGradle(folder);
     if(gradle){
         s.log("Can compile by gradle...");
         methods.push("gradle");
@@ -372,20 +389,20 @@ function findIfGradle(folder){
 
 async function findIfCpp(folder, programName){
     //what we really hope, no one uses .cc or .cxx
-    var file;
+    let file;
     //what to check:
     //1) if there's a main/projectname/index.cpp file
     //2) if a large proportion of the files are cpp (usually this means either a full on cpp project or most likely, compile by cmake or sln)
     //3) if there's literally only one file and it's a .cpp file
-    var res = await getDirectories(__dirname + "\\" + programName);
-    var cppfiles = res.filter((e) => {return e.endsWith(".cpp")});
+    let res = await getDirectories(__dirname + "\\" + programName);
+    let cppfiles = res.filter((e) => {return e.endsWith(".cpp")});
 
     if(fs.existsSync(folder + "\\main.cpp") || fs.existsSync(folder + "\\" + programName + ".cpp") || fs.existsSync(folder + "\\index.cpp")){
         //probably a singlecpp, confirm later
         s.log("findIfCpp: Found a main/programname/index.cpp");
         file = 1;
     }
-    if(cppfiles.length >= res.length/2){
+    if(cppfiles.length >= res.length/2 && res.length > 1){ //to prevent empty folders from compiling
         //worth a shot, right?
         s.log("findIfCpp: more cpp files than half of the total number of files");
         file = 1;
@@ -407,13 +424,13 @@ async function findIfCpp(folder, programName){
 
 async function findVSMethod(folder, programName){ //todo make it so if there's only one sln, just continue
 
-    var sln = ""; 
+    let sln = ""; 
 
 
     
 
-    var res = await getDirectories(__dirname + "\\" + programName); //uhh this returns all files in the folder, which takes a while, but compiling takes longer so the user will have to wait :)
-        var slns = res.filter((element) => { return element.endsWith(".sln"); });
+    let res = await getDirectories(__dirname + "\\" + programName); //uhh this returns all files in the folder, which takes a while, but compiling takes longer so the user will have to wait :)
+        let slns = res.filter((element) => { return element.endsWith(".sln"); });
         preferredSlns = slns.filter((element) => { return (element.toLowerCase().substr(element.lastIndexOf("/")).indexOf(programName) != -1) ?  element : "" }); //the preferred sln is the slns in the array with the programName in the file name
         notPreferredSlns = slns.filter((element) => { return (element.toLowerCase().substr(element.lastIndexOf("/")).indexOf(programName) == -1) ?  element : "" }); //to filter out the rest
 
@@ -434,21 +451,21 @@ async function findVSMethod(folder, programName){ //todo make it so if there's o
 
         if(preferredSlns.length != 0){
             console.log(colorText(_green, _bright + "These solutions are the better option to choose from (because they have the repo's name in the file name)"));
-            for(var i = 0; i < preferredSlns.length; i++){
+            for(let i = 0; i < preferredSlns.length; i++){
                 console.log(colorText(_magenta, _bright + "[" + (i+1) + "]")  + " " + preferredSlns[i]);
             }
         }
         console.log("\n");
         if(notPreferredSlns.length != 0){
             console.log(colorText(_yellow, _bright + "Other solutions (might still be viable!)"));
-            for(var i = 0; i < notPreferredSlns.length; i++){
+            for(let i = 0; i < notPreferredSlns.length; i++){
                 console.log(colorText(_magenta, _bright + "[" + (i+1+preferredSlns.length) + "]")  + " " + notPreferredSlns[i]);
             }
         }
 
-        var r;
+        let r;
 
-        var validNum = false;
+        let validNum = false;
 
         while(!validNum){
             console.log("Choose solution by the number indicated next to each solution");
@@ -477,26 +494,27 @@ async function findVSMethod(folder, programName){ //todo make it so if there's o
             }
             else if(r.toLowerCase() == "+"){
                 console.log(colorText(_green, "Showing more options..."));
-                slns = res.filter((element) => { return element.endsWith(".sln") || element.endsWith(".vcxproj"); });
+                s.log("Showing more options", 2);
+                slns = res.filter((element) => { return element.endsWith(".sln") || element.endsWith(".vcxproj") || element.endsWith(".csproj"); });
                 preferredSlns = slns.filter((element) => { return (element.toLowerCase().substr(element.lastIndexOf("/")).indexOf(programName) != -1) ?  element : "" }); //the preferred sln is the slns in the array with the programName in the file name
                 notPreferredSlns = slns.filter((element) => { return (element.toLowerCase().substr(element.lastIndexOf("/")).indexOf(programName) == -1) ?  element : "" }); //to filter out the rest
         
                 if(slns.length == 0){
                     return;
                 }
-                s.log("Found " + preferredSlns.length + " preferred solutions and " + notPreferredSlns.length + " not preferred solutions");
-                s.log("Preferred Solutions: " + preferredSlns, 2);
-                s.log("Not Preferred Solutions: " + notPreferredSlns, 2);
+                s.log("Found " + preferredSlns.length + " preferred solutions/vcxproj and " + notPreferredSlns.length + " not preferred solutions vcxproj");
+                s.log("Preferred Solutions/vcxproj: " + preferredSlns, 2);
+                s.log("Not Preferred Solutions/vcxproj: " + notPreferredSlns, 2);
                 if(preferredSlns.length != 0){
                     console.log(colorText(_green, _bright + "These solutions are the better option to choose from (because they have the repo's name in the file name)"));
-                    for(var i = 0; i < preferredSlns.length; i++){
+                    for(let i = 0; i < preferredSlns.length; i++){
                         console.log(colorText(_magenta, _bright + "[" + (i+1) + "]")  + " " + preferredSlns[i]);
                     }
                 }
                 console.log("\n");
                 if(notPreferredSlns.length != 0){
                     console.log(colorText(_yellow, _bright + "Other solutions (might still be viable!)"));
-                    for(var i = 0; i < notPreferredSlns.length; i++){
+                    for(let i = 0; i < notPreferredSlns.length; i++){
                         console.log(colorText(_magenta, _bright + "[" + (i+1+preferredSlns.length) + "]")  + " " + notPreferredSlns[i]);
                     }
                 }
@@ -514,8 +532,8 @@ async function findVSMethod(folder, programName){ //todo make it so if there's o
 }
 
 async function findIfCMake(folder){
-    var res = await getDirectories(folder);
-    var cmake = res.find((element) => {return element.indexOf("CMakeLists.txt") != -1 ? true : false;}) !== undefined ? true : false;
+    let res = await getDirectories(folder);
+    let cmake = res.find((element) => {return element.indexOf("CMakeLists.txt") != -1 ? true : false;}) !== undefined ? true : false;
     return new Promise((resolve) => {
         resolve(cmake);
     });
@@ -525,29 +543,29 @@ async function findIfCMake(folder){
 async function compileByMethod(method, scrypty, folder, programName, file = new Map()){
     switch(method){
         case "singleg++": 
-        if(scrypty !== undefined){
-            compileSingleGPP(folder, getScryptyOS(scrypty).mainFile, programName); break;
-        }
-        else {
-            if(file.get("singleg++") == 2){
-                folder += "\\" + programName;
+            if(scrypty !== undefined){
+                compileSingleGPP(folder, getScryptyOS(scrypty).mainFile, programName); break;
             }
-            compileSingleGPP(folder, file.get("singleg++"), programName); break;
-        }
+            else {
+                if(file.get("singleg++") == 2){
+                    folder += "\\" + programName;
+                }
+                compileSingleGPP(folder, file.get("singleg++"), programName); break;
+            }
         case "singlegcc": 
-        if(scrypty !== undefined){
-            compileSingleGCC(folder, getScryptyOS(scrypty).mainFile); break;
-        }
-        else {
-            compileSingleGCC(folder, file.get("singlegcc")); break;
-        }
+            if(scrypty !== undefined){
+                compileSingleGCC(folder, getScryptyOS(scrypty).mainFile); break;
+            }
+            else {
+                compileSingleGCC(folder, file.get("singlegcc")); break;
+            }
         case "singlego": 
-        if(scrypty !== undefined){
-            compileSingleGo(folder, getScryptyOS(scrypty).mainFile); break;
-        }
-        else {
-            compileSingleGo(folder, file.get("singlego")); break;
-        }
+            if(scrypty !== undefined){
+                compileSingleGo(folder, getScryptyOS(scrypty).mainFile); break;
+            }
+            else {
+                compileSingleGo(folder, file.get("singlego")); break;
+            }
         case "vs":
             if(scrypty !== undefined){
                 await compileVSSolution(folder, programName + "\\" + getScryptyOS(scrypty).vsSolution, programName);
@@ -560,6 +578,9 @@ async function compileByMethod(method, scrypty, folder, programName, file = new 
         case "cmake":
             compileCmake(folder, programName);
             break;
+        case "gradle":
+            compileGradle(folder);
+            break;
         case "custom":
             compileCustom(folder, scrypty);
             break;
@@ -568,12 +589,9 @@ async function compileByMethod(method, scrypty, folder, programName, file = new 
 }
 
 async function compileSingleGPP(folder, file, programName){
-    //what to check:
-    //1) if there's a main/projectname/index.cpp file, if more than one, prompt user
-    //2) if a large proportion of the files are cpp (usually this means either a full on cpp project or most likely, compile by cmake or sln), if so, prompt user that there's a fuck ton, and if they want to select one
     if(file == "none" || file === undefined || file == 2){ 
         if(fs.existsSync(folder + "\\main.cpp") || fs.existsSync(folder + "\\" + programName + ".cpp") || fs.existsSync(folder + "\\index.cpp")){
-            var files = [];
+            let files = [];
             if(fs.existsSync(folder + "\\main.cpp")){
                 files.push("main.cpp");
             }
@@ -586,13 +604,13 @@ async function compileSingleGPP(folder, file, programName){
             s.log(files + " exist of prenamed files", 2);
             if(files.length > 1){
                     console.log(colorText(_green, _bright + "Choose the .cpp file to compile:"));
-                    for(var i = 0; i < files.length; i++){
+                    for(let i = 0; i < files.length; i++){
                         console.log(colorText(_magenta, _bright + "[" + (i+1) + "]")  + " " + files[i]);
                     }
         
-                var r;
+                let r;
         
-                var validNum = false;
+                let validNum = false;
         
                 while(!validNum){
                     r = prompt("Choose the .cpp file by typing in the number next to the file: ");
@@ -626,18 +644,19 @@ async function compileSingleGPP(folder, file, programName){
     if(file == "none" || file === undefined || file == 2){ //if we still have no file selected
         files = await getDirectories(__dirname + "\\" + programName);
         files = files.filter((e) => { return e.endsWith(".cpp"); });
-        for(var i = 0; i < files.length; i++){
+        console.log(files);
+        for(let i = 0; i < files.length; i++){
             files[i] = files[i].substring(files[i].lastIndexOf("/")+1, files[i].length);
             files[i] = files[i].substring(files[i].lastIndexOf("\\")+1, files[i].length);
         }
         console.log(colorText(_green, _bright + "Choose the .cpp file to compile:"));
-            for(var i = 0; i < files.length; i++){
+            for(let i = 0; i < files.length; i++){
                 console.log(colorText(_magenta, _bright + "[" + (i+1) + "]")  + " " + files[i]);
             }
 
-        var r;
+        let r;
 
-        var validNum = false;
+        let validNum = false;
 
         while(!validNum){
             r = prompt("Choose the .cpp file by typing in the number next to the file: ");
@@ -651,6 +670,9 @@ async function compileSingleGPP(folder, file, programName){
                     console.log(colorText(_red, "Choose a valid option! (you really need to choose an option, please of course)"));
                 }
             }
+            else if(r == "exit"){
+                process.exit();
+            }
             else{
                 console.log(colorText(_red, "Choose a valid option!!"));
             }
@@ -658,19 +680,19 @@ async function compileSingleGPP(folder, file, programName){
     }
 
 
-    var cppVer;
+    let cppVer;
     console.log(colorText(_magenta, _bright + "[1] ") + "C++20");
     console.log(colorText(_magenta, _bright + "[2] ") + "C++17");
     console.log(colorText(_magenta, _bright + "[3] ") + "C++14");
     console.log(colorText(_magenta, _bright + "[4] ") + "C++11");
     console.log(colorText(_magenta, _bright + "[5] ") + "C++03");
 
-    var validNum = false; //i hate it when local variables become global, probably should be using typescript?!?!!? nah whatever this'll never not work :)
+    let validNum = false; //i hate it when local variables become global, probably should be using typescript?!?!!? nah whatever this'll never not work :)
     r = "";
 
     while(!validNum){
 
-        var r = prompt(colorText(_green, _bright + "Choose the C++ version to use (if unsure, try C++17, and if that doesn't work, go down the chain. You can try using C++20, but it's so new, some compilers might not support it): "));
+        let r = prompt(colorText(_green, _bright + "Choose the C++ version to use (if unsure, try C++17, and if that doesn't work, go down the chain. You can try using C++20, but it's so new, some compilers might not support it): "));
 
         if(parseInt(r) || r == "0"){
             if(r > 0 && r <= 5){
@@ -692,7 +714,7 @@ async function compileSingleGPP(folder, file, programName){
             console.log(colorText(_red, "Choose a valid option!"));
         }
     }
-    //why would anyone use anything prior to 03 it's not like with c people use c98 all the time, right? ....right? uh oh
+    //why would anyone use anything prior to 03 it's not like with c people use c98 all the time, right? .....right? uh oh
 
 
     console.log("Compiling file " + file);
@@ -776,7 +798,7 @@ function compileVSSolution(folder, file, programName){
             </ProjectConfiguration>
         </ItemGroup>
     */
-    var sln = [];
+    let sln = [];
     fs.readFile(file, 'utf8', (err, data) => {
 
         if(file.endsWith(".sln")){
@@ -784,12 +806,12 @@ function compileVSSolution(folder, file, programName){
             sln = sln.split("\n");
         }
         else{
-            var foundConfigPlatform = true;
-            var newData = data;
+            let foundConfigPlatform = true;
+            let newData = data;
             while(foundConfigPlatform){
                 if(newData.indexOf("<ProjectConfiguration Include=\"") != -1){
                     newData = newData.substring(newData.indexOf("<ProjectConfiguration Include=\"")+"<ProjectConfiguration Include=\"".length, newData.length);
-                    var configPlatform = newData.substring(0, newData.indexOf("\""));
+                    let configPlatform = newData.substring(0, newData.indexOf("\""));
                     if(!sln.includes(configPlatform)){
                         sln.push(configPlatform);
                     }
@@ -806,10 +828,10 @@ function compileVSSolution(folder, file, programName){
 
         sln = sln.filter((element) => { return element.indexOf("|") != -1});
 
-        var configs = [];
-        var platforms = [];
+        let configs = [];
+        let platforms = [];
 
-        for(var i = 0; i < sln.length; i++){
+        for(let i = 0; i < sln.length; i++){
             sln[i] = sln[i].replaceAll('\r', '').replaceAll('\t', '');
             sln[i] = sln[i].substr(0, sln[i].indexOf("=") != -1 ? sln[i].indexOf("=")-1 : sln[i].length); //to also get rid of the space before the =
             configs[i] = sln[i].split("|")[0];
@@ -818,18 +840,18 @@ function compileVSSolution(folder, file, programName){
 
         console.log(colorText(_green, "Configuration Platforms:"));
 
-        for(var i = 0; i < sln.length; i++){
+        for(let i = 0; i < sln.length; i++){
             console.log(colorText(_magenta, "[" + (i+1) + "]") + " " + colorText(_green, _bright + sln[i]));
         }
 
-        var validNum = false;
+        let validNum = false;
 
-        var config;
-        var platform;
+        let config;
+        let platform;
 
         while(!validNum){
 
-            var r = prompt("Choose a configuration platform to compile: ");
+            let r = prompt("Choose a configuration platform to compile: ");
 
             //geniunely no idea why this works, does prompt make it an integer already? if so, i know how this works
             if(parseInt(r) || r == "0"){
@@ -854,7 +876,7 @@ function compileVSSolution(folder, file, programName){
         }
 
         validNum = false;
-        var vsVer;
+        let vsVer;
 
 
         console.log(colorText(_magenta, "[0] ") + colorText(_yellow, "Skip/Use default"));
@@ -864,7 +886,7 @@ function compileVSSolution(folder, file, programName){
 
         while(!validNum){
 
-            var r = prompt("Select your Visual Studio version (if you just downloaded it, then you probably have 2022): ");
+            let r = prompt("Select your Visual Studio version (if you just downloaded it, then you probably have 2022): ");
 
             if(parseInt(r) || r == "0"){
                 if(r > 0 && r <= 3){
@@ -891,7 +913,7 @@ function compileVSSolution(folder, file, programName){
         }
 
 
-        var vssdk;
+        let vssdk;
 
         console.log(colorText(_magenta, "[0] ") + colorText(_yellow, "Skip/Use default"));
         console.log(colorText(_magenta, "[1] ") + colorText(_cyan, "10.0.17134.0"));
@@ -905,7 +927,7 @@ function compileVSSolution(folder, file, programName){
 
         while(!validNum){
 
-            var r = prompt("Select the preferred Windows 10 SDK: ");
+            let r = prompt("Select the preferred Windows 10 SDK: ");
 
             if(parseInt(r) || r == "0"){
                 if(r > 0 && r <= 6){
@@ -937,9 +959,9 @@ function compileVSSolution(folder, file, programName){
 
         ///p:WindowsTargetPlatformVersion=xx;WindowsTargetPlatformMinVersion=xx
 
-        var cp = config !== undefined ? " /property:Configuration=\"" + config + "\" /property:Platform=\"" + platform + "\" " : "";
-        var pt = vsVer !== undefined ? " /p:PlatformToolset=" + vsVer : "";
-        var sdk = vssdk !== undefined ? " /p:WindowsTargetPlatformVersion=\"" + vssdk + "\";WindowsTargetPlatformMinVersion=\"" + vssdk  + "\" " : "";
+        let cp = config !== undefined ? " /property:Configuration=\"" + config + "\" /property:Platform=\"" + platform + "\" " : "";
+        let pt = vsVer !== undefined ? " /p:PlatformToolset=" + vsVer : "";
+        let sdk = vssdk !== undefined ? " /p:WindowsTargetPlatformVersion=\"" + vssdk + "\";WindowsTargetPlatformMinVersion=\"" + vssdk  + "\" " : "";
 
         exec("msbuild -t:restore" + sdk + " -p:RestorePackagesConfig=true " + pt + cp + " " + file, {maxBuffer: 1024 * 4000}, (error, stdout, stderr) => { //restore nuget pacakges (if needed)
             if (stderr) {
@@ -951,7 +973,7 @@ function compileVSSolution(folder, file, programName){
             s.log("restore stdout: " + stdout, 2);
             if (error) {
                 console.log(`error: ${error.message}`);
-                s.log("restore error: ", 4);
+                s.log("restore error: " + error.message, 4);
                 console.log(colorText(_white, "Uh oh! The build might have failed, but sometimes this part is irrelevant anyways, so continuing", _bgMagenta));
                // return;
             }
@@ -996,10 +1018,10 @@ function compileCmake(folder, programName){
     console.log(colorText(_cyan, _bright + "[2]") + " Build");
     console.log(colorText(_cyan, _bright + "[3]") + " Install");
 
-    var validNum = false;
-    var option;
+    let validNum = false;
+    let option;
     while(!validNum){
-       var r = prompt(colorText(_cyan, "Choose the CMake command to do. If this the first time you're seeing this prompt while installing this repo, then press 1 (setup build environment): "));
+       let r = prompt(colorText(_cyan, "Choose the CMake command to do. If this the first time you're seeing this prompt while installing this repo, then press 1 (setup build environment): "));
 
 
         //geniunely no idea why this works, does prompt make it an integer already? if so, i know how this works
@@ -1074,6 +1096,24 @@ function compileCmake(folder, programName){
     }
 }
 
+function compileGradle(folder){
+    s.log("Gradle Compile");
+    exec("cd " + folder + " && gradlew build", (error, stdout, stderr) => {
+        if (error) {
+            console.log(`error: ${error.message}`);
+            s.log("Gradle build error: " + error, 4);
+            console.log(colorText(_white, "Uh oh! Seems like this gradle file isn't meant for building", _bgRed));
+            return;
+        }
+        if (stderr) {
+            console.log(`${stderr}`);
+            s.log("Gradle build stderr: " + stderr, 4);
+        // return;
+        }
+        s.log("Gradle build stdout: " + stdout, 2);
+        console.log(`${stdout}`);
+    });
+}
 
 async function compileCustom(folder, scrypty){
 
@@ -1082,7 +1122,7 @@ async function compileCustom(folder, scrypty){
 
     s.log("Custom commands: " + s.getScryptyCommands(scrypty), 2);
 
-    var r = "";
+    let r = "";
 
     while(r != ("y" || "n")){
         r = prompt("Y (Continue) | N (Don't continue) | C (Check commands)");
@@ -1096,7 +1136,7 @@ async function compileCustom(folder, scrypty){
                 return 1;
             case "c":
                 console.log("Commands:");
-                for(var i = 0; i < s.getScryptyCommands(scrypty).length; i++){
+                for(let i = 0; i < s.getScryptyCommands(scrypty).length; i++){
                     console.log(s.getScryptyCommands(scrypty)[i].cmd);
                 }
                 break;
@@ -1106,8 +1146,8 @@ async function compileCustom(folder, scrypty){
     }
     
 
-    var len = s.getScryptyCommands(scrypty).length;
-    var i = 0;
+    let len = s.getScryptyCommands(scrypty).length;
+    let i = 0;
     console.log("running custom commands...");
     s.log("Running custom commands");
     while(len > i){ //probably should await this...
@@ -1134,7 +1174,7 @@ async function compileCustom(folder, scrypty){
 function findWorkingDir(programName){
     //with the method below, we can clone the git repo to the root of our directory
     //but the problem is zip files don't behave the same way, so we'll have to check whether there's a single folder inside the folder and cd into there
-    var folder = __dirname + "\\" + programName;
+    let folder = __dirname + "\\" + programName;
     fs.readdir(folder, function (err, files) {
         if (err) {
           console.log(err);
@@ -1179,18 +1219,52 @@ function getFile(url){
 
 
 if(process.argv.length > 2){
-    download(process.argv[2]);
+    run(process.argv[2]);
 }
 else{
-    download("https://github.com/RPCS3/progflow");
+    run("https://github.com/battlecode/battlecode22-scaffold");
 }
 //compile("dolphin");
 
 
+function run(link){
+    displayScryptyInfo();
+    download(link);
+}
+
+
+function displayScryptyInfo(){
+    console.log("Welcome to Scrypty!");
+    console.log("Using Scrypty Version " + scryptyVersion);
+}
+
+
+async function checkPrerequisitesPromises(){
+    let promises = [];
+    for(let i = 0; i < methodNames.length; i++){
+        promises.push(checkIfExecFails(methodCommands[i]));
+    }   
+    return Promise.allSettled(promises);
+}
+
+function checkIfExecFails(command){
+    let fails = true;
+    return new Promise((resolve) => {
+        exec(command, (error, stdout, stderr) => {
+            if(error){
+                fails = true;
+            }
+            else{
+                fails = false;
+            }
+            resolve(fails);
+        });
+    });
+}
 
 async function gitDownload(url, programName){
 
-    var folder = __dirname + "\\" + programName;
+    let folder = __dirname + "\\" + programName;
 
     fs.mkdir(folder, (err) => {
         //  console.error(err); it just keeps saying that we've already made this directory so lets just comment this out for now
@@ -1221,7 +1295,7 @@ async function gitDownload(url, programName){
 
 async function zipDownload(programName, url) {
 
-    var folder = __dirname + "\\" + programName;
+    let folder = __dirname + "\\" + programName;
 
     fs.mkdir(folder, (err) => {
         //  console.error(err); it just keeps saying that we've already made this directory so lets just comment this out for now
