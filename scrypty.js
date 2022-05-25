@@ -115,7 +115,7 @@ function getProgramNameFromURL(url){
 //  be able to run said repos
 //  run scripts as defined in a scripts folder of a repo or defined by the scrypty file
 //  delete repos
-//what scrypty DOESN'T do
+//what scrypty might do
 //  be a package manager
 //  install new updates (unless fresh install by user request)
 //what scrypty SHOULDN'T do (but is able to)
