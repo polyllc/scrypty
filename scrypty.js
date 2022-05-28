@@ -10,11 +10,11 @@ const s = require("./src/scryptylib");
 const util = require('util');
 const cmake = require("./src/scryptyCmake");
 const path = require("path");
-const inquirer = require("inquirer");
+const minimist = require("minimist");
 
 //const execP = util.promisify(require('child_process').exec);
 
-const scryptyVersion = "v0.0.27";
+const scryptyVersion = "v0.0.31";
 
 //color defines
 
@@ -131,11 +131,11 @@ function getProgramNameFromURL(url){
 //finish methods and compiling
 //add prerequisite checking (on scryptys)
 //add prerequisite installing
-//check if compilers/builders are even available on the system
+//check if compilers/builders are even available on the system, if not, install them
 //add help
 //add custom os installers (arch, debian, etc)
 //add custom run commands on scrypties
-//check if certain methods of compiling are even valid or if the tools are installed
+//check if certain methods of compiling are even valid or if the tools are installed, if not, install
 
 
 async function download(url){
@@ -261,6 +261,7 @@ async function compile(programName){
     let validScrypty = 0;
 
     let allFiles = await getDirectories(folder);
+    console.log("\n");
 
     let file = new Map(); //for the file to compile/build off of (like the main .cpp, the .sln, etc)
     file.set("singleg++", "none");
@@ -339,6 +340,8 @@ async function compile(programName){
 
 
 function getDirectories(src, array = []) { 
+
+    //wow really, glob you have failed me :(
     // return new Promise(resolve =>{ //to make it valid with await
     //    glob(src + '/**/*', (error, res) => {
     //        console.log(src);
@@ -348,13 +351,6 @@ function getDirectories(src, array = []) {
     //        console.log(res);
     //    resolve(res) });
     //}); 
-    
-    //let files = [];
-    //fs.readdirSync(src).forEach(File => {
-    //   const Absolute = Path.join(src, File);
-    //    if (fs.statSync(Absolute).isDirectory()) return getDirectories(Absolute);
-    //    else return files.push(Absolute);
-    //});
     files = fs.readdirSync(src);
 
     let arrayOfFiles = array || [];
@@ -389,7 +385,6 @@ async function findMethods(folder, programName, methods, allFiles) {
 
     let cmakeF = await findIfCMake(allFiles);
     if(cmakeF){
-        cmake.parseCmake(folder + "\\CMakeLists.txt");
         s.log("Can compile by CMake...");
         methods.push("cmake");
     }
@@ -578,7 +573,7 @@ async function compileByMethod(method, scrypty, folder, programName, file = new 
     switch(method){
         case "singleg++": 
             if(scrypty !== undefined){
-                compileSingleGPP(folder, getScryptyOS(scrypty).mainFile, programName); break;
+                compileSingleGPP(folder, folder + "\\" + s.getScryptyOS(scrypty).mainFile, programName); break;
             }
             else {
                 if(file.get("singleg++") == 2){
@@ -588,21 +583,21 @@ async function compileByMethod(method, scrypty, folder, programName, file = new 
             }
         case "singlegcc": 
             if(scrypty !== undefined){
-                compileSingleGCC(folder, getScryptyOS(scrypty).mainFile); break;
+                compileSingleGCC(folder, folder + "\\" + s.getScryptyOS(scrypty).mainFile); break;
             }
             else {
                 compileSingleGCC(folder, file.get("singlegcc")); break;
             }
         case "singlego": 
             if(scrypty !== undefined){
-                compileSingleGo(folder, getScryptyOS(scrypty).mainFile); break;
+                compileSingleGo(folder, folder + "\\" + s.getScryptyOS(scrypty).mainFile); break;
             }
             else {
                 compileSingleGo(folder, file.get("singlego")); break;
             }
         case "vs":
             if(scrypty !== undefined){
-                await compileVSSolution(folder, programName + "\\" + getScryptyOS(scrypty).vsSolution, programName);
+                await compileVSSolution(folder, folder + "\\" +  s.getScryptyOS(scrypty).vsSolution, programName);
             }
             else{
                 await compileVSSolution(folder, file.get("vs"), programName);
@@ -753,7 +748,10 @@ async function compileSingleGPP(folder, file, programName){
 
     console.log("Compiling file " + file);
     s.log("Compiling file " + file + "... cppVer: " + cppVer);
-    exec("g++ --std=" + cppVer + " " + folder + "\\" + file + " -o " + folder + "\\" + file.substr(0, file.lastIndexOf(".")) + (os.platform() == "win32" ? ".exe" : ""), (error, stdout, stderr) => {
+    let spinner = new s.spinner(100, colorText(_white, "Building", _bgGreen));
+    spinner.start();
+    exec("g++ --std=" + cppVer + " " + file + " -o " + file.substr(0, file.lastIndexOf(".")) + (os.platform() == "win32" ? ".exe" : ""), (error, stdout, stderr) => {
+        spinner.stop();
         if (error) {
             console.log(`error: ${error.message}`);
             s.log(error, 4);
@@ -1039,7 +1037,7 @@ function compileVSSolution(folder, file, programName){
                     - Making sure that you've set up the build environment (using something like cmake or whatever the repo says)
                     - Install all of the prerequesits 
                     - If there are other options to compile, try those instead`, _bgRed));
-                    console.log(colorText(_green, "Most importantly, check the scrypty log! " + s.getLogFile(), _bgWhite));
+                    console.log(colorText(_black, "Most importantly, check the scrypty log! scryptyLogs/" + s.getLogFile() + ".scryptylog", _bgGreen));
                 }
                 else{
                     return new Promise((resolve) =>{
@@ -1054,7 +1052,7 @@ function compileVSSolution(folder, file, programName){
     });
 }
 
-function compileCmake(folder, programName){
+async function compileCmake(folder, programName){
 
     console.log(colorText(_cyan, _bright + "[1]") + " Setup Build Environment (do this one first!)");
     console.log(colorText(_cyan, _bright + "[2]") + " Build");
@@ -1086,29 +1084,18 @@ function compileCmake(folder, programName){
     let cmakeResults = cmake.parseCmake(folder + "\\CMakeLists.txt");
 
     let cmakeResultsArray = [];
+    console.log(cmakeResultsArray);
 
     cmakeResults.forEach((value, key) => {
-        if(value){
-            cmakeResultsArray.push({name: key, checked: value});
-        }
-        else{
-            cmakeResultsArray.push({name: key});
-        }
+        cmakeResultsArray.push({name: key, selected: value});
     });
 
     if(cmakeResultsArray.length == 0){
         runCMake();
     }
     else{
-        inquirer.prompt([{
-            type: "checkbox",
-            name: "CMake Options",
-            message: colorText(_green, _bright + "Select what options you want for compiling (you can safely skip if you don't want to mess with the defaults)"),
-            choices: cmakeResultsArray
-        }]).then((answers) => {
-            console.log(answers);
-            runCMake(answers);
-        });
+        let results = await s.listOptions(cmakeResultsArray, colorText(_green, "Choose CMake options, space to toggle, enter to accept\nThese are the default settings, so you can just skip if you want"));
+        runCMake(results);
     }
         
         
@@ -1116,13 +1103,30 @@ function compileCmake(folder, programName){
 
         
 
-        function runCMake(answers = []) {
+    function runCMake(answers = []) {
         let spinner =  new s.spinner(100, colorText(_white, "Building", _bgGreen));
         spinner.start();
         process.stdout.cursorTo(0,0);
         process.stdout.clearScreenDown();
             switch (option) {
-                case "1": exec("cd " + folder + " && cmake -D CMAKE_BUILD_TYPE= -S ./ -B ./build", (error, stdout, stderr) => {
+                case "1": 
+                
+                let updatedAnswers = [];
+
+                for(var i = 0; i < cmakeResultsArray.length; i++){
+                    if(cmakeResultsArray[i] != answers[i]){
+                        updatedAnswers.push(answers[i]);
+                    }
+                }
+
+                if(updatedAnswers.length > 0){
+                    updatedAnswers.forEach(element => {
+                        str += element.name.substring(0, element.name.indexOf("|")).trim() + "=" + (element.selected ? "on" : "off") + " ";
+                    });
+                }
+                let str = updatedAnswers.length > 0 ? "-D " : "";
+
+                exec("cd " + folder + " && cmake -D CMAKE_BUILD_TYPE= " + str + " -S ./ -B ./build", (error, stdout, stderr) => {
                     spinner.stop();
                     if (error) {
                         console.log(`error: ${error.message}`);
@@ -1308,7 +1312,6 @@ if(process.argv.length > 2){
 else{
     run("https://github.com/battlecode/duckstation");
 }
-//compile("dolphin");
 
 
 function run(link){
@@ -1356,7 +1359,9 @@ async function gitDownload(url, programName){
         return;
     });
 
-    console.log("Cloning into " + folder + "...");
+
+    let spinner = new s.spinner(100, "Cloning into " + folder);
+    spinner.start();
     s.log("Cloning into " + folder + "...");
 
     exec("git clone " + url + " " + folder + " --recursive", (error, stdout, stderr) => {
@@ -1370,7 +1375,7 @@ async function gitDownload(url, programName){
             s.log(stderr, 3);
            // return;
         }
-        console.log(`${stdout}`);
+        spinner.stop(); 
         s.log(stdout, 2);
         compile(programName);
         s.log("Starting to compile");

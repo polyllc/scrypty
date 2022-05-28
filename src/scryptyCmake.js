@@ -12,23 +12,24 @@ function parseCmake(file){
     let options = new Map();
 
     splitUp.forEach((el) => {
-        let key = el.substring(el.indexOf("\"")+1, el.lastIndexOf("\""));
-        let value = el.substring(el.lastIndexOf("\""), el.lastIndexOf(")"));
+        let key =  el.substring(el.indexOf("(")+1, el.indexOf("\"")).trim() + " | " + el.substring(el.indexOf("\"")+1, el.lastIndexOf("\""));
+        let value = el.substring(el.lastIndexOf("\"")+1, el.lastIndexOf(")")).trim();
         if(value == "off"){  //sometimes, its not a simple on or off, they're actually variables, but we don't really know what the variables are in reference to
-            value = false;
-            options.set(key, value);
+            options.set(key, false);
         }
         else if(value == "on"){
-            value = true;
-            options.set(key, value);
+            options.set(key, true);
         }
+        //we set it to true and false so listOptions can be used for more than one use case (in comparison to off/on)
         //so
-        //key = Use your installed copy of curl
+        //key = USE_SHARED_CURL | Use your installed copy of curl
         //value = false
+
         
     });
     return options;
 }
+
 
 
 exports.parseCmake = parseCmake;

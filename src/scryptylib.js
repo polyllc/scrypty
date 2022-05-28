@@ -248,7 +248,7 @@ function verifyScrypty(scryptyFile){ //so much verifying to do!
         console.error("Uh oh, the scrypty has no valid compilation instructions for your OS at all! But there still might be a way to compile, so continuing...");
         return 1;
     }
-
+    return 0;
 }
 
 function findIfScrypty(files) {
@@ -310,22 +310,24 @@ function clearLine(){
     process.stdout.cursorTo(0); 
 }
 
+function clearMultpleLines(num){
+    for(var i = 0; i < num; i++){
+        process.stdout.cursorTo(0,-1);
+        process.stdout.clearLine(0);
+    }
+}
 
 class spinner {
-    current = 0;
     constructor(speed, text){
         this.speed = speed;
         this.text = text;
-        this.current = 0;
         this.interval = 0;
-        console.log(this.current);
     }
 
     start(){
         this.current = 0;
         this.num = new int(0);
         this.interval = setInterval(this.spin, this.speed, new int(0), this.text);
-        console.log("started");
     }
     
     spin(num, text){
@@ -371,6 +373,93 @@ class int {
     }
 }
 
+
+
+
+async function listOptions(options, text){
+
+    //options format looks like this
+    /*
+    [{
+        name: "things",
+        selected: false
+    },
+    {
+        name: "another thing",
+        selected: false
+    }
+    ]
+
+    */
+    var index = 0;
+    process.stdin.setRawMode(true);
+    process.stdin.resume();
+    process.stdin.setEncoding("hex");
+
+    process.stdout.cursorTo(0,0);
+    process.stdout.clearScreenDown();
+    var returned = displayListOptions(options, text, index);
+    index = returned.index;
+    options = returned.options;
+
+    return new Promise((resolve) => {
+        process.stdin.on('data', (key) => {
+            process.stdout.cursorTo(0,0);
+            process.stdout.clearScreenDown();
+            returned = displayListOptions(options, text, index, key);
+            index = returned.index;
+            options = returned.options;
+            if(key == "03"){ //ctrl+c (at least on windows)
+                process.exit();
+            }
+            if(key == "0d"){
+                process.stdin.setRawMode(false);
+                process.stdin.on('data',()=>{}); //so this function doesnt run anymore and take priority
+                process.stdin.resume();
+                resolve(options);
+            }
+        });
+    });
+}
+
+function displayListOptions(options, text, index = 0, key = "none"){
+
+    //clearMultpleLines(options.length+1);
+
+    if(key == "1b5b41"){ //up arrow
+        if(index > 0){
+            index--;
+        }
+    }  
+    if(key == "1b5b42"){ //down arrow
+        if(index < options.length-1){
+            index++;
+        }
+    }
+    if(key == "20"){
+        options[index].selected = !options[index].selected;
+    }
+    console.log(text);
+    for(var i = 0; i < options.length; i++){
+        var str = "";
+        if(options[i].selected){
+            str += "(" + colorText(_green, "*") + ")";
+        }
+        else{
+            str += "( )";
+        }
+        if(index == i){
+            str += colorText(_black, " " + options[i].name, _bgWhite);
+        }
+        else{
+            str += colorText(_bright, " " + options[i].name);
+        }
+        process.stdout.write(str + "\n");
+    }
+    return {index:index, options:options};
+}
+
+
 exports.spinner = spinner;
 exports.parseScrypty = parseScrypty;
 exports.findIfScrypty = findIfScrypty;
@@ -384,3 +473,4 @@ exports.setLogFile = setLogFile;
 exports.logBoth = logBoth;
 exports.clearLine = clearLine;
 exports.getLogFile = getLogFile;
+exports.listOptions = listOptions;
