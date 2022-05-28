@@ -1,16 +1,20 @@
 const http = require("http");
-const fs = require("fs");
 const request = require("request");
+const fs = require("fs");
 const { exec } = require("child_process");
 const unzipper = require("unzipper");
 const os = require("os");
 let prompt = require("prompt-sync")();
 const glob = require("glob");
-const s = require("./scryptylib");
+const s = require("./src/scryptylib");
 const util = require('util');
-const execP = util.promisify(require('child_process').exec);
+const cmake = require("./src/scryptyCmake");
+const path = require("path");
+const inquirer = require("inquirer");
 
-const scryptyVersion = "v0.0.26";
+//const execP = util.promisify(require('child_process').exec);
+
+const scryptyVersion = "v0.0.27";
 
 //color defines
 
@@ -40,7 +44,7 @@ const _blink = "\x1b[5m"
 const _reverse = "\x1b[7m"
 const _hidden = "\x1b[8m"
 
-let methodNames = ["g++", "gcc", "Visual Studio", "java", "go", "cmake", "make"];
+let methodNames = ["g++", "gcc", "Visual Studio", "java", "go", "cmake", "make"]; //todo, make into map
 let methodCommands = ["g++ --help", "gcc --help", "msbuild -help", "javac -help", "go help", "cmake", "make"];
 
 let verbosity = 0;
@@ -191,7 +195,7 @@ async function download(url){
 
 async function compile(programName){
     let workingDir = findWorkingDir(programName);
-   
+    s.log("Current Working directory: " + workingDir, 1);
 
     //stuff to find:
     //a scrypty file!! (lmao no one's going to put this into their program)
@@ -256,6 +260,8 @@ async function compile(programName){
 
     let validScrypty = 0;
 
+    let allFiles = await getDirectories(folder);
+
     let file = new Map(); //for the file to compile/build off of (like the main .cpp, the .sln, etc)
     file.set("singleg++", "none");
 
@@ -281,7 +287,7 @@ async function compile(programName){
         }
         //insert finding method code here (without scrypty)
 
-        file = await findMethods(folder, programName, methods, file); //no idea why, but methods is global, so we don't even need to return that
+        file = await findMethods(folder, programName, methods, allFiles); //no idea why, but methods is global, so we don't even need to return that
     }
 
 
@@ -332,15 +338,47 @@ async function compile(programName){
 }
 
 
-function getDirectories(src) { 
-    return new Promise(resolve =>{ //to make it valid with await
-        glob(src + '/**/*', (error, res) => resolve(res));
+function getDirectories(src, array = []) { 
+    // return new Promise(resolve =>{ //to make it valid with await
+    //    glob(src + '/**/*', (error, res) => {
+    //        console.log(src);
+    //        if(error){
+    //            console.error(error);
+    //       }
+    //        console.log(res);
+    //    resolve(res) });
+    //}); 
+    
+    //let files = [];
+    //fs.readdirSync(src).forEach(File => {
+    //   const Absolute = Path.join(src, File);
+    //    if (fs.statSync(Absolute).isDirectory()) return getDirectories(Absolute);
+    //    else return files.push(Absolute);
+    //});
+    files = fs.readdirSync(src);
+
+    let arrayOfFiles = array || [];
+  
+    s.clearLine();
+    process.stdout.write("Found " + arrayOfFiles.length + " files");
+
+    files.forEach(function(file) {
+      if (fs.statSync(src + "/" + file).isDirectory()) {
+        arrayOfFiles = getDirectories(src + "/" + file, arrayOfFiles);
+      } else {
+        arrayOfFiles.push(path.join(src, "/", file));
+      }
+    })
+  
+    arrayOfFiles.forEach(element => {
+       element.replaceAll("\\", "/"); 
     });
+    return arrayOfFiles;
 }
 
 
 
-async function findMethods(folder, programName, methods) {
+async function findMethods(folder, programName, methods, allFiles) {
     
     let file = new Map();
     
@@ -349,20 +387,21 @@ async function findMethods(folder, programName, methods) {
     //vs sln, often after you make the build environment, a new sln pops up
     //
 
-    let cmake = await findIfCMake(folder);
-    if(cmake){
+    let cmakeF = await findIfCMake(allFiles);
+    if(cmakeF){
+        cmake.parseCmake(folder + "\\CMakeLists.txt");
         s.log("Can compile by CMake...");
         methods.push("cmake");
     }
 
-    let vs = await findVSMethod(folder, programName);
+    let vs = await findVSMethod(allFiles, programName);
     if (vs) {
         s.log("Can compile by Visual Studio...");
         file.set("vs", vs);
         methods.push("vs");
     }
 
-    let cpp = await findIfCpp(folder, programName);
+    let cpp = await findIfCpp(folder, programName, allFiles);
     if(cpp){
         s.log("Can compile by G++...");
         methods.push("singleg++");
@@ -387,28 +426,27 @@ function findIfGradle(folder){
     return fs.existsSync(folder + "/build.gradle");
 }
 
-async function findIfCpp(folder, programName){
+async function findIfCpp(folder, programName, allFiles){
     //what we really hope, no one uses .cc or .cxx
     let file;
     //what to check:
     //1) if there's a main/projectname/index.cpp file
     //2) if a large proportion of the files are cpp (usually this means either a full on cpp project or most likely, compile by cmake or sln)
     //3) if there's literally only one file and it's a .cpp file
-    let res = await getDirectories(__dirname + "\\" + programName);
-    let cppfiles = res.filter((e) => {return e.endsWith(".cpp")});
+    let cppfiles = allFiles.filter((e) => {return e.endsWith(".cpp")});
 
-    if(fs.existsSync(folder + "\\main.cpp") || fs.existsSync(folder + "\\" + programName + ".cpp") || fs.existsSync(folder + "\\index.cpp")){
+    if(fs.existsSync(folder + "\\main.cpp") || fs.existsSync(folder + ".cpp") || fs.existsSync(folder + "\\index.cpp")){
         //probably a singlecpp, confirm later
         s.log("findIfCpp: Found a main/programname/index.cpp");
         file = 1;
     }
-    if(cppfiles.length >= res.length/2 && res.length > 1){ //to prevent empty folders from compiling
+    if(cppfiles.length >= allFiles.length/2 && allFiles.length > 1){ //to prevent empty folders from compiling
         //worth a shot, right?
         s.log("findIfCpp: more cpp files than half of the total number of files");
         file = 1;
     }
 
-    if(fs.existsSync(folder + "\\" + programName + "\\main.cpp") || fs.existsSync(folder + "\\" + programName + "\\" + programName + ".cpp") || fs.existsSync(folder + "\\" + programName + "\\index.cpp")){
+    if(fs.existsSync(folder + "\\main.cpp") || fs.existsSync(folder + "\\" + programName + ".cpp") || fs.existsSync(folder + "\\index.cpp")){
         file = 2;
         s.log("findIfCpp: found a Found a main/programname/index.cpp in programname subfolder");
     }
@@ -422,15 +460,11 @@ async function findIfCpp(folder, programName){
     });
 }
 
-async function findVSMethod(folder, programName){ //todo make it so if there's only one sln, just continue
+async function findVSMethod(allFiles, programName){ //todo make it so if there's only one sln, just continue
 
     let sln = ""; 
 
-
-    
-
-    let res = await getDirectories(__dirname + "\\" + programName); //uhh this returns all files in the folder, which takes a while, but compiling takes longer so the user will have to wait :)
-        let slns = res.filter((element) => { return element.endsWith(".sln"); });
+        let slns = allFiles.filter((element) => { return element.endsWith(".sln"); });
         preferredSlns = slns.filter((element) => { return (element.toLowerCase().substr(element.lastIndexOf("/")).indexOf(programName) != -1) ?  element : "" }); //the preferred sln is the slns in the array with the programName in the file name
         notPreferredSlns = slns.filter((element) => { return (element.toLowerCase().substr(element.lastIndexOf("/")).indexOf(programName) == -1) ?  element : "" }); //to filter out the rest
 
@@ -531,11 +565,11 @@ async function findVSMethod(folder, programName){ //todo make it so if there's o
     });
 }
 
-async function findIfCMake(folder){
-    let res = await getDirectories(folder);
-    let cmake = res.find((element) => {return element.indexOf("CMakeLists.txt") != -1 ? true : false;}) !== undefined ? true : false;
+async function findIfCMake(allFiles){
+    s.log("Searching for CMakeLists");
+    let cmakefile = allFiles.find((element) => {return element.indexOf("CMakeLists.txt") != -1 ? true : false;}) !== undefined ? true : false;
     return new Promise((resolve) => {
-        resolve(cmake);
+        resolve(cmakefile);
     });
 }
 
@@ -769,6 +803,7 @@ function compileSingleGo(folder, file){ //todo, test it
     });
 }
 
+
 function compileVSSolution(folder, file, programName){
     console.log(colorText(_magenta, "Compiling solution..."));
     s.log("Compiling solution " + file + "...");
@@ -963,13 +998,18 @@ function compileVSSolution(folder, file, programName){
         let pt = vsVer !== undefined ? " /p:PlatformToolset=" + vsVer : "";
         let sdk = vssdk !== undefined ? " /p:WindowsTargetPlatformVersion=\"" + vssdk + "\";WindowsTargetPlatformMinVersion=\"" + vssdk  + "\" " : "";
 
+        let spinner =  new s.spinner(100, colorText(_white, "Building", _bgGreen));
+        spinner.start();
+        process.stdout.cursorTo(0,0);
+        process.stdout.clearScreenDown();
+
         exec("msbuild -t:restore" + sdk + " -p:RestorePackagesConfig=true " + pt + cp + " " + file, {maxBuffer: 1024 * 4000}, (error, stdout, stderr) => { //restore nuget pacakges (if needed)
             if (stderr) {
-                console.log(`${stderr}`);
+               // console.log(`${stderr}`);
                 s.log("restore stderr: " + stderr, 4);
             // return;
             }
-            console.log(`${stdout}`);
+            //console.log(`${stdout}`);
             s.log("restore stdout: " + stdout, 2);
             if (error) {
                 console.log(`error: ${error.message}`);
@@ -978,13 +1018,14 @@ function compileVSSolution(folder, file, programName){
                // return;
             }
            
-            exec("msbuild " + file + sdk + pt + cp, {maxBuffer: 1024 * 4000}, (error, stdout, stderr) => {
+            exec("msbuild -m " + file + sdk + pt + cp, {maxBuffer: 1024 * 4000}, (error, stdout, stderr) => {
+                spinner.stop();
                 if (stderr) {
-                    console.log(`${stderr}`);
+                  //  console.log(`${stderr}`);
                     s.log("sln build stderr: " + stderr, 4);
                 // return;
                 }
-                console.log(`${stdout}`);
+                //console.log(`${stdout}`);
                     s.log("sln build stdout: " + stdout, 2);
                 if (error) {
                     console.log(`error: ${error.message}`);
@@ -998,6 +1039,7 @@ function compileVSSolution(folder, file, programName){
                     - Making sure that you've set up the build environment (using something like cmake or whatever the repo says)
                     - Install all of the prerequesits 
                     - If there are other options to compile, try those instead`, _bgRed));
+                    console.log(colorText(_green, "Most importantly, check the scrypty log! " + s.getLogFile(), _bgWhite));
                 }
                 else{
                     return new Promise((resolve) =>{
@@ -1041,59 +1083,101 @@ function compileCmake(folder, programName){
     }
 
 
-    switch(option){
-        case "1": exec("cd " + folder + " && cmake -S ./ -B ./build", (error, stdout, stderr) => {
-            if (error) {
-                console.log(`error: ${error.message}`);
-                s.log("CMake environment build error: " + error, 4);
-                return;
-            }
-            if (stderr) {
-                console.log(`${stderr}`);
-                s.log("CMake environment build stderr: " + stderr, 4);
-            // return;
-            }
-            console.log(`${stdout}`);
-            s.log("CMake environment build stdout: " + stdout, 2);
-            console.log(colorText(_green, "Created the build environment! Rescanning for new methods of compiling..."));
-            compile(programName);
-            return;
-        }); break;
-        case "2": exec("cd " + folder + " && cmake --build ./", (error, stdout, stderr) => {
-            if (error) {
-                console.log(`error: ${error.message}`);
-                s.log("CMake build error: " + error, 4);
-                console.log(colorText(_white, "Uh oh! Seems like this repository can't be built with CMake (or something else happened). Try using a different method of compiling.", _bgRed));
-                return;
-            }
-            if (stderr) {
-                console.log(`${stderr}`);
-                s.log("CMake build stderr: " + stderr, 4);
-            // return;
-            }
-            s.log("CMake build stdout: " + stdout, 2);
-            console.log(`${stdout}`);
-            console.log(colorText(_green, "Build Complete!"));
-            return;
-        }); break;
-        case "3": exec("cd " + folder + " && cmake --install ./", (error, stdout, stderr) => {
-            if (error) {
-                s.log("CMake install error: " + error, 4);
-                console.log(`error: ${error.message}`);
-                console.log(colorText(_white, "Uh oh! Seems like this repository can't be installed with CMake (or something else happened). Try using a different method of compiling.", _bgRed));
-                return;
-            }
-            if (stderr) {
-                s.log("CMake install stderr: " + stderr, 4);
-                console.log(`${stderr}`);
-            // return;
-            }
-            s.log("CMake install stdout: " + stdout, 2);
-            console.log(`${stdout}`);
-            console.log(colorText(_green, "Install complete!"));
-            return;
+    let cmakeResults = cmake.parseCmake(folder + "\\CMakeLists.txt");
+
+    let cmakeResultsArray = [];
+
+    cmakeResults.forEach((value, key) => {
+        if(value){
+            cmakeResultsArray.push({name: key, checked: value});
+        }
+        else{
+            cmakeResultsArray.push({name: key});
+        }
+    });
+
+    if(cmakeResultsArray.length == 0){
+        runCMake();
+    }
+    else{
+        inquirer.prompt([{
+            type: "checkbox",
+            name: "CMake Options",
+            message: colorText(_green, _bright + "Select what options you want for compiling (you can safely skip if you don't want to mess with the defaults)"),
+            choices: cmakeResultsArray
+        }]).then((answers) => {
+            console.log(answers);
+            runCMake(answers);
         });
     }
+        
+        
+
+
+        
+
+        function runCMake(answers = []) {
+        let spinner =  new s.spinner(100, colorText(_white, "Building", _bgGreen));
+        spinner.start();
+        process.stdout.cursorTo(0,0);
+        process.stdout.clearScreenDown();
+            switch (option) {
+                case "1": exec("cd " + folder + " && cmake -D CMAKE_BUILD_TYPE= -S ./ -B ./build", (error, stdout, stderr) => {
+                    spinner.stop();
+                    if (error) {
+                        console.log(`error: ${error.message}`);
+                        s.log("CMake environment build error: " + error, 4);
+                        return;
+                    }
+                    if (stderr) {
+                        console.log(`${stderr}`);
+                        s.log("CMake environment build stderr: " + stderr, 4);
+                        // return;
+                    }
+                    //console.log(`${stdout}`);
+                    s.log("CMake environment build stdout: " + stdout, 2);
+                    console.log(colorText(_green, "Created the build environment! Rescanning for new methods of compiling..."));
+                    compile(programName);
+                    return;
+                }); break;
+                case "2": exec("cd " + folder + " && cmake --build ./", (error, stdout, stderr) => {
+                    spinner.stop();
+                    if (error) {
+                        console.log(`error: ${error.message}`);
+                        s.log("CMake build error: " + error, 4);
+                        console.log(colorText(_white, "Uh oh! Seems like this repository can't be built with CMake (or something else happened). Try using a different method of compiling.", _bgRed));
+                        return;
+                    }
+                    if (stderr) {
+                        console.log(`${stderr}`);
+                        s.log("CMake build stderr: " + stderr, 4);
+                        // return;
+                    }
+                    s.log("CMake build stdout: " + stdout, 2);
+                    //console.log(`${stdout}`);
+                    console.log(colorText(_green, "Build Complete!"));
+                    return;
+                }); break;
+                case "3": exec("cd " + folder + " && cmake --install ./", (error, stdout, stderr) => {
+                    spinner.stop();
+                    if (error) {
+                        s.log("CMake install error: " + error, 4);
+                        console.log(`error: ${error.message}`);
+                        console.log(colorText(_white, "Uh oh! Seems like this repository can't be installed with CMake (or something else happened). Try using a different method of compiling.", _bgRed));
+                        return;
+                    }
+                    if (stderr) {
+                        s.log("CMake install stderr: " + stderr, 4);
+                        console.log(`${stderr}`);
+                        // return;
+                    }
+                    s.log("CMake install stdout: " + stdout, 2);
+                    //console.log(`${stdout}`);
+                    console.log(colorText(_green, "Install complete!"));
+                    return;
+                });
+            }
+        }
 }
 
 function compileGradle(folder){
@@ -1174,7 +1258,7 @@ async function compileCustom(folder, scrypty){
 function findWorkingDir(programName){
     //with the method below, we can clone the git repo to the root of our directory
     //but the problem is zip files don't behave the same way, so we'll have to check whether there's a single folder inside the folder and cd into there
-    let folder = __dirname + "\\" + programName;
+    let folder = __dirname + "\\repositories\\" + programName;
     fs.readdir(folder, function (err, files) {
         if (err) {
           console.log(err);
@@ -1222,7 +1306,7 @@ if(process.argv.length > 2){
     run(process.argv[2]);
 }
 else{
-    run("https://github.com/battlecode/battlecode22-scaffold");
+    run("https://github.com/battlecode/duckstation");
 }
 //compile("dolphin");
 
@@ -1264,7 +1348,7 @@ function checkIfExecFails(command){
 
 async function gitDownload(url, programName){
 
-    let folder = __dirname + "\\" + programName;
+    let folder = __dirname + "\\repositories\\" + programName;
 
     fs.mkdir(folder, (err) => {
         //  console.error(err); it just keeps saying that we've already made this directory so lets just comment this out for now
@@ -1295,7 +1379,7 @@ async function gitDownload(url, programName){
 
 async function zipDownload(programName, url) {
 
-    let folder = __dirname + "\\" + programName;
+    let folder = __dirname + "\\repositories\\" + programName;
 
     fs.mkdir(folder, (err) => {
         //  console.error(err); it just keeps saying that we've already made this directory so lets just comment this out for now
@@ -1322,3 +1406,14 @@ async function zipDownload(programName, url) {
              });
         });
 }
+
+
+
+//process.stdin.setRawMode(true);
+//process.stdin.resume();
+//process.stdin.setEncoding("utf8");
+
+process.stdin.on('keypress', (str, key) => { //so we can do ctrl+c anywhere, not where it just crashes
+    console.log(key);
+    if (key && key.ctrl && key.name == 'c') process.exit();
+});

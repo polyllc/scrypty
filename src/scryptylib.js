@@ -289,7 +289,7 @@ function log(message, severity = 1){
         case 3: logstr = "[WARNING " + date + "] "  + message; break;
         case 4: logstr = "[ERROR " + date + "] "  + message; break;
     }
-    fs.appendFile(__dirname + "\\scryptyLogs\\" + file + ".scryptylog", logstr + "\n", (err) => {
+    fs.appendFile(__dirname + "\\..\\scryptyLogs\\" + file + ".scryptylog", logstr + "\n", (err) => {
         if (err) throw err;
     });
     //severity logs
@@ -306,10 +306,72 @@ function logBoth(message, severity = 1){
 }
 
 function clearLine(){
-    process.stdout.clearLine();
+    process.stdout.clearLine(0);
     process.stdout.cursorTo(0); 
 }
 
+
+class spinner {
+    current = 0;
+    constructor(speed, text){
+        this.speed = speed;
+        this.text = text;
+        this.current = 0;
+        this.interval = 0;
+        console.log(this.current);
+    }
+
+    start(){
+        this.current = 0;
+        this.num = new int(0);
+        this.interval = setInterval(this.spin, this.speed, new int(0), this.text);
+        console.log("started");
+    }
+    
+    spin(num, text){
+        switch(num.getNum()%4){
+            case 0:
+                clearLine();
+                process.stdout.write(text + " |");
+                break;
+            case 1:
+                clearLine();
+                process.stdout.write(text + " /");
+                break;
+            case 2:
+                clearLine();
+                process.stdout.write(text + " -");
+                break;
+            case 3:
+                clearLine();
+                process.stdout.write(text + " \\");
+                break;
+        }
+        num.addOne();
+    }
+
+    stop(){
+        clearInterval(this.interval);
+    }
+}
+//for above, since spin isn't technically part of the class (because its called upon a non class function, setInterval), this.current doesn't work
+class int {
+    number
+    constructor(num){
+        this.number = num;
+    }
+    getNum(){
+        return this.number;
+    }
+    setNum(num){
+        this.number = num;
+    }
+    addOne(){
+        this.number++;
+    }
+}
+
+exports.spinner = spinner;
 exports.parseScrypty = parseScrypty;
 exports.findIfScrypty = findIfScrypty;
 exports.verifyScrypty = verifyScrypty;
@@ -321,3 +383,4 @@ exports.log = log;
 exports.setLogFile = setLogFile;
 exports.logBoth = logBoth;
 exports.clearLine = clearLine;
+exports.getLogFile = getLogFile;
