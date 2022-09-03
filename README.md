@@ -26,4 +26,4 @@
 - autocustom compile by instructions found in readme (if all else fails!)
  ---
 # how to use
- pretty simple, clone the repository, go to the folder where the file `package.json` is in, get in a command line, type in `npm install`, and then to run it, use `node scrypty.js {github link}`, where {github link} is the repository you're trying to install. 
+ pretty simple, install the latest version of node.js, clone the repository (by downloading as zip or cloning with git), go to the folder where the file `package.json` is in, get in a command line, type in `npm install`, and then to run it, use `node scrypty.js {github link}`, where {github link} is the repository you're trying to install. 
