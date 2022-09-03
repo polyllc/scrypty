@@ -1,2 +1,4 @@
 repositories/
 scryptyLogs/
+node_modules/
+package-lock.json

@@ -47,6 +47,15 @@ const _hidden = "\x1b[8m"
 let methodNames = ["g++", "gcc", "Visual Studio", "java", "go", "cmake", "make"]; //todo, make into map
 let methodCommands = ["g++ --help", "gcc --help", "msbuild -help", "javac -help", "go help", "cmake", "make"];
 
+const _cmakeExecutable = "cmake";
+const _msbuildExecutable = "msbuild";
+const _gppExecutable = "gpp";
+const _gccExecutable = "gcc";
+const _javaExecutable = "javac";
+const _goExecutable = "go";
+const _ninjaExecutable = "ninja";
+const _mesonExecutable = "meson";
+
 let verbosity = 0;
 //-1, nothing but prompts
 //0, normal, prompts + build messages
@@ -163,7 +172,7 @@ async function download(url){
 
     let fileToDownload = getFile(url);
 
-    if(fileToDownload == "null"){
+    if(fileToDownload == "null"){ //how type safe
         console.log("Not a vaild url! Make sure it's a github link (to an actual repo) or a zip file link");
         s.log("Url: " + url + " wasn't valid" , 4);
         return;
@@ -187,7 +196,7 @@ async function download(url){
         return;
     }
 
-    //after we've downloaded the file, we need to somehow compile it
+    //after we've downloaded the file, we need to somehow compile it, compile is called by zipDownload or gitDownload
 
 
 }
@@ -524,14 +533,14 @@ async function findVSMethod(allFiles, programName){ //todo make it so if there's
             else if(r.toLowerCase() == "+"){
                 console.log(colorText(_green, "Showing more options..."));
                 s.log("Showing more options", 2);
-                slns = res.filter((element) => { return element.endsWith(".sln") || element.endsWith(".vcxproj") || element.endsWith(".csproj"); });
+                slns = allFiles.filter((element) => { return element.endsWith(".sln") || element.endsWith(".vcxproj") || element.endsWith(".csproj"); });
                 preferredSlns = slns.filter((element) => { return (element.toLowerCase().substr(element.lastIndexOf("/")).indexOf(programName) != -1) ?  element : "" }); //the preferred sln is the slns in the array with the programName in the file name
                 notPreferredSlns = slns.filter((element) => { return (element.toLowerCase().substr(element.lastIndexOf("/")).indexOf(programName) == -1) ?  element : "" }); //to filter out the rest
         
                 if(slns.length == 0){
                     return;
                 }
-                s.log("Found " + preferredSlns.length + " preferred solutions/vcxproj and " + notPreferredSlns.length + " not preferred solutions vcxproj");
+                s.log("Found " + preferredSlns.length + " preferred solutions/vcxproj and " + notPreferredSlns.length + " not preferred solutions/vcxproj");
                 s.log("Preferred Solutions/vcxproj: " + preferredSlns, 2);
                 s.log("Not Preferred Solutions/vcxproj: " + notPreferredSlns, 2);
                 if(preferredSlns.length != 0){
@@ -1037,7 +1046,7 @@ function compileVSSolution(folder, file, programName){
                     - Making sure that you've set up the build environment (using something like cmake or whatever the repo says)
                     - Install all of the prerequesits 
                     - If there are other options to compile, try those instead`, _bgRed));
-                    console.log(colorText(_black, "Most importantly, check the scrypty log! scryptyLogs/" + s.getLogFile() + ".scryptylog", _bgGreen));
+                    console.log(colorText(_black, "Most importantly, update Visual Studio and check the scrypty log! scryptyLogs/" + s.getLogFile() + ".scryptylog", _bgGreen));
                 }
                 else{
                     return new Promise((resolve) =>{
@@ -1411,14 +1420,3 @@ async function zipDownload(programName, url) {
              });
         });
 }
-
-
-
-//process.stdin.setRawMode(true);
-//process.stdin.resume();
-//process.stdin.setEncoding("utf8");
-
-process.stdin.on('keypress', (str, key) => { //so we can do ctrl+c anywhere, not where it just crashes
-    console.log(key);
-    if (key && key.ctrl && key.name == 'c') process.exit();
-});

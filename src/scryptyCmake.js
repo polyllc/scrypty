@@ -14,10 +14,10 @@ function parseCmake(file){
     splitUp.forEach((el) => {
         let key =  el.substring(el.indexOf("(")+1, el.indexOf("\"")).trim() + " | " + el.substring(el.indexOf("\"")+1, el.lastIndexOf("\""));
         let value = el.substring(el.lastIndexOf("\"")+1, el.lastIndexOf(")")).trim();
-        if(value == "off"){  //sometimes, its not a simple on or off, they're actually variables, but we don't really know what the variables are in reference to
+        if(value.toLowerCase() == "off"){  //sometimes, its not a simple on or off, they're actually variables, but we don't really know what the variables are in reference to
             options.set(key, false);
         }
-        else if(value == "on"){
+        else if(value.toLowerCase() == "on"){
             options.set(key, true);
         }
         //we set it to true and false so listOptions can be used for more than one use case (in comparison to off/on)
