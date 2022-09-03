@@ -2,7 +2,7 @@
  universal repository installer & runner
 
 # features
- so far, not too many
+ so far, not too many,
  it can:
  - install most sln/visual studio programs
  - install most cmake + visual studio programs
