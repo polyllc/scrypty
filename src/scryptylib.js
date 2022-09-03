@@ -1,5 +1,6 @@
 const fs = require("fs");
 const os = require("os");
+const path = require("path")
 
 
 const _black = "\x1b[30m";
@@ -279,6 +280,14 @@ function setLogFile(filename){
 }
 
 function log(message, severity = 1){
+
+    if(!fs.existsSync("\\..\\scryptyLogs")){
+        fs.mkdirSync(path.join(__dirname, '../scryptyLogs'), { recursive: true })
+    }
+    if(!fs.existsSync("\\..\\repositories")){
+        fs.mkdirSync(path.join(__dirname, '../repositories'), { recursive: true })
+    }
+
     let file = getLogFile();
 
     let logstr;
