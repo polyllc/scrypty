@@ -24,6 +24,14 @@
 - meson      compile by meson
 - ninja      compile by ninja
 - autocustom compile by instructions found in readme (if all else fails!)
+
+also planned is that it will automatically install the compilers, so you don't have to,
+oh and these things too:
+ - delete repositories
+ - reinstall repositories (for updates)
+ - some web app thing for a gui
+ - probably a website where you can just download scrypty files and it'll just install correctly the first time around
  ---
 # how to use
  pretty simple, install the latest version of node.js, clone the repository (by downloading as zip or cloning with git), go to the folder where the file `package.json` is in, get in a command line, type in `npm install`, and then to run it, use `node scrypty.js {github link}`, where {github link} is the repository you're trying to install. 
+ make sure you have all the compilers already installed
