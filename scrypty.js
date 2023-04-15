@@ -12,6 +12,10 @@ const cmake = require("./src/scryptyCmake");
 const path = require("path");
 const minimist = require("minimist");
 
+
+
+const vsCompile = require("./src/vsCompile");
+const cmakeCompile = require("./src/cmakeCompile");
 //const execP = util.promisify(require('child_process').exec);
 
 const scryptyVersion = "v0.0.31";
@@ -156,7 +160,7 @@ async function download(url){
     s.log("Using Scrypty " + scryptyVersion);
     s.log("Downloading " + url);
     s.log("Program name is " + programName);
-    await checkPrerequisitesPromises().then((results) => { //instead of making the function actually print out if it fails or not, we do this because otherwise we would somehow need to make that other function return a promise, and await inside a function that's called by a function that isn't await doens't work
+    await checkPrerequisitesPromises().then((results) => { //instead of making the function actually print out if it fails or not, we do this because otherwise we would somehow need to make that other function return a promise, and await inside a function that's called by a function that isn't await doesn't work
         let i = 0;
         results.forEach((result) => {
             if(result.value){ //meaning command failed
@@ -276,18 +280,18 @@ async function compile(programName){
     file.set("singleg++", "none");
 
     if(s.findIfScrypty(files)){
-            console.log("Found Scrypty file!");
-            s.log("Found scrypty file");
-            scryptyFile = folder + "\\" + files.find((element) => { return element.endsWith(".scrypty");} );
-            if(s.verifyScrypty(scryptyFile) == 0){
-                validScrypty = 1;
-                console.log("Verified scrypty!");
-                s.log("Scrypty verified");
-                scrypty = s.parseScrypty(scryptyFile); 
-                //todo support multiple methods
-                methods.push(s.getMethod(scrypty)); //we always listen to scrypty file!
-                file.set(s.getMethod(scrypty));
-            }
+        console.log("Found Scrypty file!");
+        s.log("Found scrypty file");
+        scryptyFile = folder + "\\" + files.find((element) => { return element.endsWith(".scrypty");} );
+        if(s.verifyScrypty(scryptyFile) == 0){
+            validScrypty = 1;
+            console.log("Verified scrypty!");
+            s.log("Scrypty verified");
+            scrypty = s.parseScrypty(scryptyFile); 
+            //todo support multiple methods
+            methods.push(s.getMethod(scrypty)); //we always listen to scrypty file!
+            file.set(s.getMethod(scrypty));
+        }
     }
     if(validScrypty == 0){
         if(os.hostname() == ("freebsd" || "aix" || "openbsd" || "android" || "sunos")){ //honestly no idea how I'm going to test this, well other than install each os in a vm
@@ -295,8 +299,6 @@ async function compile(programName){
             s.log("Can't find compilation instructions for " + os.hostname() + " from scrypty file", 4);
             return;
         }
-        //insert finding method code here (without scrypty)
-
         file = await findMethods(folder, programName, methods, allFiles); //no idea why, but methods is global, so we don't even need to return that
     }
 
@@ -305,7 +307,7 @@ async function compile(programName){
     if(methods.length == 1){
         console.log(colorText(_black, "Compiling by " + methods[0], _bgWhite));
         s.log("Compiling by " + methods[0], 2);
-        compileByMethod(methods[0], scrypty, folder, programName, file);
+        compileByMethod(methods[0], scrypty, folder, programName, file, allFiles);
         
     }
     else if(methods.length > 1){
@@ -318,14 +320,11 @@ async function compile(programName){
         let validNum = false;
         while(!validNum){
            let r = prompt("Choose the way you want to compile: ");
-
-
-            //geniunely no idea why this works, does prompt make it an integer already? if so, i know how this works
             if(parseInt(r)){
                 if(r > 0 && r <= methods.length){
                     console.log(colorText(_black, "Compiling by " + methods[parseInt(r)-1], _bgWhite));
                     s.log("Compiling by " + methods[parseInt(r)-1], 1);
-                    compileByMethod(methods[parseInt(r)-1], scrypty, folder, programName, file);                    
+                    compileByMethod(methods[parseInt(r)-1], scrypty, folder, programName, file, allFiles);                    
                     validNum = true;
                 }  
                 else{
@@ -342,24 +341,17 @@ async function compile(programName){
         s.log("Can't compile repository, no way found", 4);
         return;
     }
-    
-
-
 }
 
-
 function getDirectories(src, array = []) { 
+    return new Promise(resolve =>{ //to make it valid with await
+        glob(src + '/**/*', (error, res) => {
+            if(error){
+                console.error(error);
+           }
 
-    //wow really, glob you have failed me :(
-    // return new Promise(resolve =>{ //to make it valid with await
-    //    glob(src + '/**/*', (error, res) => {
-    //        console.log(src);
-    //        if(error){
-    //            console.error(error);
-    //       }
-    //        console.log(res);
-    //    resolve(res) });
-    //}); 
+        resolve(res) });
+    }); 
     files = fs.readdirSync(src);
 
     let arrayOfFiles = array || [];
@@ -381,8 +373,6 @@ function getDirectories(src, array = []) {
     return arrayOfFiles;
 }
 
-
-
 async function findMethods(folder, programName, methods, allFiles) {
     
     let file = new Map();
@@ -392,16 +382,15 @@ async function findMethods(folder, programName, methods, allFiles) {
     //vs sln, often after you make the build environment, a new sln pops up
     //
 
-    let cmakeF = await findIfCMake(allFiles);
+    let cmakeF = await cmakeCompile.findIfCMake(allFiles);
     if(cmakeF){
         s.log("Can compile by CMake...");
         methods.push("cmake");
     }
 
-    let vs = await findVSMethod(allFiles, programName);
+    let vs = await vsCompile.findIfVS(allFiles); //todo, make this so it happens after the fact, not before knowing the list of the build options
     if (vs) {
-        s.log("Can compile by Visual Studio...");
-        file.set("vs", vs);
+        s.log("Can compile by Visual Studio (there are .slns available, unknown whether projects of inner libraries or not)...");
         methods.push("vs");
     }
 
@@ -464,121 +453,8 @@ async function findIfCpp(folder, programName, allFiles){
     });
 }
 
-async function findVSMethod(allFiles, programName){ //todo make it so if there's only one sln, just continue
 
-    let sln = ""; 
-
-        let slns = allFiles.filter((element) => { return element.endsWith(".sln"); });
-        preferredSlns = slns.filter((element) => { return (element.toLowerCase().substr(element.lastIndexOf("/")).indexOf(programName) != -1) ?  element : "" }); //the preferred sln is the slns in the array with the programName in the file name
-        notPreferredSlns = slns.filter((element) => { return (element.toLowerCase().substr(element.lastIndexOf("/")).indexOf(programName) == -1) ?  element : "" }); //to filter out the rest
-
-        if(slns.length == 0){
-            return;
-        }
-        //todo, separate vcxproj from slns by listing separate by user choice
-        console.log("Found solutions!");
-        s.log("Found " + preferredSlns.length + " preferred solutions and " + notPreferredSlns.length + " not preferred solutions");
-        s.log("Preferred Solutions: " + preferredSlns, 2);
-        s.log("Not Preferred Solutions: " + notPreferredSlns, 2);
-
-        console.log(colorText(_black, _dim + "Choose a solution to compile (you can choose later if there are more methods to compile whether or not to compile by visual studio solutions)", _bgCyan));
-        console.log("\n");
-
-
-        console.log(colorText(_green, colorText(_cyan, _bright + "[0]") + _bright + " Skip/Don't compile by Visual Studio"));
-
-        if(preferredSlns.length != 0){
-            console.log(colorText(_green, _bright + "These solutions are the better option to choose from (because they have the repo's name in the file name)"));
-            for(let i = 0; i < preferredSlns.length; i++){
-                console.log(colorText(_magenta, _bright + "[" + (i+1) + "]")  + " " + preferredSlns[i]);
-            }
-        }
-        console.log("\n");
-        if(notPreferredSlns.length != 0){
-            console.log(colorText(_yellow, _bright + "Other solutions (might still be viable!)"));
-            for(let i = 0; i < notPreferredSlns.length; i++){
-                console.log(colorText(_magenta, _bright + "[" + (i+1+preferredSlns.length) + "]")  + " " + notPreferredSlns[i]);
-            }
-        }
-
-        let r;
-
-        let validNum = false;
-
-        while(!validNum){
-            console.log("Choose solution by the number indicated next to each solution");
-            r = prompt("Type in '+' for more options:");
-
-
-            //geniunely no idea why this works, does prompt make it an integer already? if so, i know how this works
-            if(parseInt(r) || r == "0"){
-                if(r > 0 && r <= slns.length){
-                    if(parseInt(r) > preferredSlns.length){ //parseInt just in case
-                        sln = notPreferredSlns[parseInt(r)-preferredSlns.length-1];
-                    }
-                    else{
-                        sln = preferredSlns[parseInt(r)-1];
-                    }
-                    validNum = true;
-                }  
-                else if(r == "0"){
-                    console.log(colorText(_red, "Not compiling by Visual Studio (skipped by user)"));
-                    s.log("Skipped compiling by sln");
-                    validNum = true;
-                }  
-                else{
-                    console.log(colorText(_red, "Choose a valid option!"));
-                }
-            }
-            else if(r.toLowerCase() == "+"){
-                console.log(colorText(_green, "Showing more options..."));
-                s.log("Showing more options", 2);
-                slns = allFiles.filter((element) => { return element.endsWith(".sln") || element.endsWith(".vcxproj") || element.endsWith(".csproj"); });
-                preferredSlns = slns.filter((element) => { return (element.toLowerCase().substr(element.lastIndexOf("/")).indexOf(programName) != -1) ?  element : "" }); //the preferred sln is the slns in the array with the programName in the file name
-                notPreferredSlns = slns.filter((element) => { return (element.toLowerCase().substr(element.lastIndexOf("/")).indexOf(programName) == -1) ?  element : "" }); //to filter out the rest
-        
-                if(slns.length == 0){
-                    return;
-                }
-                s.log("Found " + preferredSlns.length + " preferred solutions/vcxproj and " + notPreferredSlns.length + " not preferred solutions/vcxproj");
-                s.log("Preferred Solutions/vcxproj: " + preferredSlns, 2);
-                s.log("Not Preferred Solutions/vcxproj: " + notPreferredSlns, 2);
-                if(preferredSlns.length != 0){
-                    console.log(colorText(_green, _bright + "These solutions are the better option to choose from (because they have the repo's name in the file name)"));
-                    for(let i = 0; i < preferredSlns.length; i++){
-                        console.log(colorText(_magenta, _bright + "[" + (i+1) + "]")  + " " + preferredSlns[i]);
-                    }
-                }
-                console.log("\n");
-                if(notPreferredSlns.length != 0){
-                    console.log(colorText(_yellow, _bright + "Other solutions (might still be viable!)"));
-                    for(let i = 0; i < notPreferredSlns.length; i++){
-                        console.log(colorText(_magenta, _bright + "[" + (i+1+preferredSlns.length) + "]")  + " " + notPreferredSlns[i]);
-                    }
-                }
-        
-        
-            }
-            else{
-                console.log(colorText(_red, "Choose a valid option!!"));
-            }
-        }
-    return new Promise((resolve) => {
-        s.log("Sln chosen: " + sln);
-        resolve(sln);
-    });
-}
-
-async function findIfCMake(allFiles){
-    s.log("Searching for CMakeLists");
-    let cmakefile = allFiles.find((element) => {return element.indexOf("CMakeLists.txt") != -1 ? true : false;}) !== undefined ? true : false;
-    return new Promise((resolve) => {
-        resolve(cmakefile);
-    });
-}
-
-
-async function compileByMethod(method, scrypty, folder, programName, file = new Map()){
+async function compileByMethod(method, scrypty, folder, programName, file = new Map(), allFiles = []){
     switch(method){
         case "singleg++": 
             if(scrypty !== undefined){
@@ -609,12 +485,13 @@ async function compileByMethod(method, scrypty, folder, programName, file = new 
                 await compileVSSolution(folder, folder + "\\" +  s.getScryptyOS(scrypty).vsSolution, programName);
             }
             else{
-                await compileVSSolution(folder, file.get("vs"), programName);
+                let vs = await vsCompile.findVSMethod(allFiles, programName);
+                await vsCompile.compileVSSolution(folder, vs, programName);
             }
             break;
 
         case "cmake":
-            compileCmake(folder, programName);
+            cmakeCompile.compileCmake(folder, programName);
             break;
         case "gradle":
             compileGradle(folder);
@@ -810,388 +687,6 @@ function compileSingleGo(folder, file){ //todo, test it
     });
 }
 
-
-function compileVSSolution(folder, file, programName){
-    console.log(colorText(_magenta, "Compiling solution..."));
-    s.log("Compiling solution " + file + "...");
-
-
-
-    //config platforms for reference :)
-    /*
-    GlobalSection(SolutionConfigurationPlatforms) = preSolution
-		CodeCoverage|Any CPU = CodeCoverage|Any CPU
-		Debug|Any CPU = Debug|Any CPU
-		Linux|Any CPU = Linux|Any CPU
-		Release|Any CPU = Release|Any CPU
-	EndGlobalSection
-
-
-    and for vcxproj:
-    
-      <ItemGroup Label="ProjectConfigurations">
-            <ProjectConfiguration Include="Debug|x64">
-            <Configuration>Debug</Configuration>
-            <Platform>x64</Platform>
-            </ProjectConfiguration>
-            <ProjectConfiguration Include="Release|x64">
-            <Configuration>Release</Configuration>
-            <Platform>x64</Platform>
-            </ProjectConfiguration>
-        </ItemGroup>
-    */
-    let sln = [];
-    fs.readFile(file, 'utf8', (err, data) => {
-
-        if(file.endsWith(".sln")){
-            sln = data.substr(data.indexOf("GlobalSection(SolutionConfigurationPlatforms) = preSolution") + "GlobalSection(SolutionConfigurationPlatforms) = preSolution".length, data.substr(data.indexOf("GlobalSection(SolutionConfigurationPlatforms) = preSolution")).indexOf("EndGlobalSection"));
-            sln = sln.split("\n");
-        }
-        else{
-            let foundConfigPlatform = true;
-            let newData = data;
-            while(foundConfigPlatform){
-                if(newData.indexOf("<ProjectConfiguration Include=\"") != -1){
-                    newData = newData.substring(newData.indexOf("<ProjectConfiguration Include=\"")+"<ProjectConfiguration Include=\"".length, newData.length);
-                    let configPlatform = newData.substring(0, newData.indexOf("\""));
-                    if(!sln.includes(configPlatform)){
-                        sln.push(configPlatform);
-                    }
-                    else{
-                        foundConfigPlatform = false; 
-                    }
-                    newData = newData.substring(newData.indexOf("\""), newData.length);
-                } 
-                else{
-                    foundConfigPlatform = false;
-                }
-            }
-        }
-
-        sln = sln.filter((element) => { return element.indexOf("|") != -1});
-
-        let configs = [];
-        let platforms = [];
-
-        for(let i = 0; i < sln.length; i++){
-            sln[i] = sln[i].replaceAll('\r', '').replaceAll('\t', '');
-            sln[i] = sln[i].substr(0, sln[i].indexOf("=") != -1 ? sln[i].indexOf("=")-1 : sln[i].length); //to also get rid of the space before the =
-            configs[i] = sln[i].split("|")[0];
-            platforms[i] = sln[i].split("|")[1];
-        }
-
-        console.log(colorText(_green, "Configuration Platforms:"));
-
-        for(let i = 0; i < sln.length; i++){
-            console.log(colorText(_magenta, "[" + (i+1) + "]") + " " + colorText(_green, _bright + sln[i]));
-        }
-
-        let validNum = false;
-
-        let config;
-        let platform;
-
-        while(!validNum){
-
-            let r = prompt("Choose a configuration platform to compile: ");
-
-            //geniunely no idea why this works, does prompt make it an integer already? if so, i know how this works
-            if(parseInt(r) || r == "0"){
-                if(r > 0 && r <= sln.length){
-                    config = configs[r-1];
-                    platform = platforms[r-1];
-                    validNum = true;
-                    s.log("Chose config " + config + ", platform " + platform);
-                }    
-                else if(r == "0"){
-                    console.log(colorText(_yellow, "Skipping... (using the default might still work, if not, choose one for your system, there's a reason why this option is hidden!)"));
-                    s.log("Skipped config platform", 2);
-                    validNum = true;
-                }
-                else{
-                    console.log(colorText(_red, "Choose a valid option!"));
-                }
-            }
-            else{
-                console.log(colorText(_red, "Choose a valid option!"));
-            }
-        }
-
-        validNum = false;
-        let vsVer;
-
-
-        console.log(colorText(_magenta, "[0] ") + colorText(_yellow, "Skip/Use default"));
-        console.log(colorText(_magenta, "[1] ") + colorText(_cyan, "Visual Studio 2017"));
-        console.log(colorText(_magenta, "[2] ") + colorText(_cyan, "Visual Studio 2019"));
-        console.log(colorText(_magenta, "[3] ") + colorText(_cyan, "Visual Studio 2022"));
-
-        while(!validNum){
-
-            let r = prompt("Select your Visual Studio version (if you just downloaded it, then you probably have 2022): ");
-
-            if(parseInt(r) || r == "0"){
-                if(r > 0 && r <= 3){
-                    switch(r){
-                        case "1": vsVer = "v141"; break;
-                        case "2": vsVer = "v142"; break;
-                        case "3": vsVer = "v143"; break;
-                    }
-                    validNum = true;
-                    s.log("Chose vsVer " + vsVer, 2);
-                }    
-                else if(r == "0"){
-                    console.log(colorText(_green, "Skipping..."));
-                    s.log("Skipped vsVer", 2);
-                    validNum = true;
-                }
-                else{
-                    console.log(colorText(_red, "Choose a valid option!"));
-                }
-            }
-            else{
-                console.log(colorText(_red, "Choose a valid option!"));
-            }
-        }
-
-
-        let vssdk;
-
-        console.log(colorText(_magenta, "[0] ") + colorText(_yellow, "Skip/Use default"));
-        console.log(colorText(_magenta, "[1] ") + colorText(_cyan, "10.0.17134.0"));
-        console.log(colorText(_magenta, "[2] ") + colorText(_cyan, "10.0.17763.0"));
-        console.log(colorText(_magenta, "[3] ") + colorText(_cyan, "10.0.18362.0"));
-        console.log(colorText(_magenta, "[4] ") + colorText(_cyan, "10.0.19041.0"));
-        console.log(colorText(_magenta, "[5] ") + colorText(_cyan, "10.0.20348.0"));
-        console.log(colorText(_magenta, "[6] ") + colorText(_cyan, "10.0.22000.0"));
-
-        validNum = false;
-
-        while(!validNum){
-
-            let r = prompt("Select the preferred Windows 10 SDK: ");
-
-            if(parseInt(r) || r == "0"){
-                if(r > 0 && r <= 6){
-                    switch(r){
-                        case "1": vssdk = "10.0.17134.0"; break;
-                        case "2": vssdk = "10.0.17763.0"; break;
-                        case "3": vssdk = "10.0.18362.0"; break;
-                        case "4": vssdk = "10.0.19041.0"; break;
-                        case "5": vssdk = "10.0.20348.0"; break;
-                        case "6": vssdk = "10.0.22000.0"; break;
-                    }
-                    validNum = true;
-                    s.log("Chose sdk " + vssdk, 2);
-                }    
-                else if(r == "0"){
-                    console.log(colorText(_green, "Skipping..."));
-                    s.log("Skipped sdk", 2);
-                    validNum = true;
-                }
-                else{
-                    console.log(colorText(_red, "Choose a valid option!"));
-                }
-            }
-            else{
-                console.log(colorText(_red, "Choose a valid option!"));
-            }
-        }
-        
-
-        ///p:WindowsTargetPlatformVersion=xx;WindowsTargetPlatformMinVersion=xx
-
-        let cp = config !== undefined ? " /property:Configuration=\"" + config + "\" /property:Platform=\"" + platform + "\" " : "";
-        let pt = vsVer !== undefined ? " /p:PlatformToolset=" + vsVer : "";
-        let sdk = vssdk !== undefined ? " /p:WindowsTargetPlatformVersion=\"" + vssdk + "\";WindowsTargetPlatformMinVersion=\"" + vssdk  + "\" " : "";
-
-        let spinner =  new s.spinner(100, colorText(_white, "Building", _bgGreen));
-        spinner.start();
-        process.stdout.cursorTo(0,0);
-        process.stdout.clearScreenDown();
-
-        exec("msbuild -t:restore" + sdk + " -p:RestorePackagesConfig=true " + pt + cp + " " + file, {maxBuffer: 1024 * 4000}, (error, stdout, stderr) => { //restore nuget pacakges (if needed)
-            if (stderr) {
-               // console.log(`${stderr}`);
-                s.log("restore stderr: " + stderr, 4);
-            // return;
-            }
-            //console.log(`${stdout}`);
-            s.log("restore stdout: " + stdout, 2);
-            if (error) {
-                console.log(`error: ${error.message}`);
-                s.log("restore error: " + error.message, 4);
-                console.log(colorText(_white, "Uh oh! The build might have failed, but sometimes this part is irrelevant anyways, so continuing", _bgMagenta));
-               // return;
-            }
-           
-            exec("msbuild -m " + file + sdk + pt + cp, {maxBuffer: 1024 * 4000}, (error, stdout, stderr) => {
-                spinner.stop();
-                if (stderr) {
-                  //  console.log(`${stderr}`);
-                    s.log("sln build stderr: " + stderr, 4);
-                // return;
-                }
-                //console.log(`${stdout}`);
-                    s.log("sln build stdout: " + stdout, 2);
-                if (error) {
-                    console.log(`error: ${error.message}`);
-                    s.log("sln build error: " + error, 4);
-                    console.log(colorText(_white, `Uh oh! The build failed! Most likely the .sln or any of the files that the .sln mentions has an error in it. It also might be an error due to not having MSBuild in your environment variables! Another common error is not having the right build tools installed, which you can install using the Visual Studio installer.
-                    You can also try these things:
-                    - Changing the build tools version (visual studio version option)
-                    - Changing the platform configuration
-                    - Changing the Windows SDK version
-                    - Choosing another .sln
-                    - Making sure that you've set up the build environment (using something like cmake or whatever the repo says)
-                    - Install all of the prerequesits 
-                    - If there are other options to compile, try those instead`, _bgRed));
-                    console.log(colorText(_black, "Most importantly, update Visual Studio and check the scrypty log! scryptyLogs/" + s.getLogFile() + ".scryptylog", _bgGreen));
-                }
-                else{
-                    return new Promise((resolve) =>{
-                        resolve(sln);
-                    });
-                }
-            });
-        });
-    });
-    return new Promise((resolve) =>{
-        resolve(sln);
-    });
-}
-
-async function compileCmake(folder, programName){
-
-    console.log(colorText(_cyan, _bright + "[1]") + " Setup Build Environment (do this one first!)");
-    console.log(colorText(_cyan, _bright + "[2]") + " Build");
-    console.log(colorText(_cyan, _bright + "[3]") + " Install");
-
-    let validNum = false;
-    let option;
-    while(!validNum){
-       let r = prompt(colorText(_cyan, "Choose the CMake command to do. If this the first time you're seeing this prompt while installing this repo, then press 1 (setup build environment): "));
-
-
-        //geniunely no idea why this works, does prompt make it an integer already? if so, i know how this works
-        if(parseInt(r)){
-            if(r > 0 && r <= 3){
-                option = r;    
-                validNum = true;
-                s.log("compileCmake, Chose " + r);
-            }  
-            else{
-                console.log(colorText(_red, "Choose a valid option!"));
-            }
-        }
-        else{
-            console.log(colorText(_red, "Choose a valid option!!"));
-        }
-    }
-
-
-    let cmakeResults = cmake.parseCmake(folder + "\\CMakeLists.txt");
-
-    let cmakeResultsArray = [];
-    console.log(cmakeResultsArray);
-
-    cmakeResults.forEach((value, key) => {
-        cmakeResultsArray.push({name: key, selected: value});
-    });
-
-    if(cmakeResultsArray.length == 0){
-        runCMake();
-    }
-    else{
-        let results = await s.listOptions(cmakeResultsArray, colorText(_green, "Choose CMake options, space to toggle, enter to accept\nThese are the default settings, so you can just skip if you want"));
-        runCMake(results);
-    }
-        
-        
-
-
-        
-
-    function runCMake(answers = []) {
-        let spinner =  new s.spinner(100, colorText(_white, "Building", _bgGreen));
-        spinner.start();
-        process.stdout.cursorTo(0,0);
-        process.stdout.clearScreenDown();
-            switch (option) {
-                case "1": 
-                
-                let updatedAnswers = [];
-
-                for(var i = 0; i < cmakeResultsArray.length; i++){
-                    if(cmakeResultsArray[i] != answers[i]){
-                        updatedAnswers.push(answers[i]);
-                    }
-                }
-
-                if(updatedAnswers.length > 0){
-                    updatedAnswers.forEach(element => {
-                        str += element.name.substring(0, element.name.indexOf("|")).trim() + "=" + (element.selected ? "on" : "off") + " ";
-                    });
-                }
-                let str = updatedAnswers.length > 0 ? "-D " : "";
-
-                exec("cd " + folder + " && cmake -D CMAKE_BUILD_TYPE= " + str + " -S ./ -B ./build", (error, stdout, stderr) => {
-                    spinner.stop();
-                    if (error) {
-                        console.log(`error: ${error.message}`);
-                        s.log("CMake environment build error: " + error, 4);
-                        return;
-                    }
-                    if (stderr) {
-                        console.log(`${stderr}`);
-                        s.log("CMake environment build stderr: " + stderr, 4);
-                        // return;
-                    }
-                    //console.log(`${stdout}`);
-                    s.log("CMake environment build stdout: " + stdout, 2);
-                    console.log(colorText(_green, "Created the build environment! Rescanning for new methods of compiling..."));
-                    compile(programName);
-                    return;
-                }); break;
-                case "2": exec("cd " + folder + " && cmake --build ./", (error, stdout, stderr) => {
-                    spinner.stop();
-                    if (error) {
-                        console.log(`error: ${error.message}`);
-                        s.log("CMake build error: " + error, 4);
-                        console.log(colorText(_white, "Uh oh! Seems like this repository can't be built with CMake (or something else happened). Try using a different method of compiling.", _bgRed));
-                        return;
-                    }
-                    if (stderr) {
-                        console.log(`${stderr}`);
-                        s.log("CMake build stderr: " + stderr, 4);
-                        // return;
-                    }
-                    s.log("CMake build stdout: " + stdout, 2);
-                    //console.log(`${stdout}`);
-                    console.log(colorText(_green, "Build Complete!"));
-                    return;
-                }); break;
-                case "3": exec("cd " + folder + " && cmake --install ./", (error, stdout, stderr) => {
-                    spinner.stop();
-                    if (error) {
-                        s.log("CMake install error: " + error, 4);
-                        console.log(`error: ${error.message}`);
-                        console.log(colorText(_white, "Uh oh! Seems like this repository can't be installed with CMake (or something else happened). Try using a different method of compiling.", _bgRed));
-                        return;
-                    }
-                    if (stderr) {
-                        s.log("CMake install stderr: " + stderr, 4);
-                        console.log(`${stderr}`);
-                        // return;
-                    }
-                    s.log("CMake install stdout: " + stdout, 2);
-                    //console.log(`${stdout}`);
-                    console.log(colorText(_green, "Install complete!"));
-                    return;
-                });
-            }
-        }
-}
 
 function compileGradle(folder){
     s.log("Gradle Compile");

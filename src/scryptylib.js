@@ -12,6 +12,14 @@ const _magenta = "\x1b[35m";
 const _cyan = "\x1b[36m";
 const _white = "\x1b[37m";
 
+exports._black = _black;
+exports._red = _red;
+exports._green = _green;
+exports._yellow = _blue;
+exports._magenta = _magenta;
+exports._cyan = _cyan;
+exports._white = _white;
+
 const _bgBlack = "\x1b[40m"
 const _bgRed = "\x1b[41m"
 const _bgGreen = "\x1b[42m"
@@ -21,6 +29,15 @@ const _bgMagenta = "\x1b[45m"
 const _bgCyan = "\x1b[46m"
 const _bgWhite = "\x1b[47m"
 
+exports._bgBlack = _bgBlack;
+exports._bgRed = _bgRed;
+exports._bgGreen = _bgGreen;
+exports._bgYellow = _bgYellow;
+exports._bgBlue = _bgBlue;
+exports._bgMagenta = _bgMagenta;
+exports._bgCyan = _bgCyan;
+exports._bgWhite = _bgWhite;
+
 const _reset = "\x1b[0m"
 const _bright = "\x1b[1m"
 const _dim = "\x1b[2m"
@@ -28,6 +45,10 @@ const _underscore = "\x1b[4m"
 const _blink = "\x1b[5m"
 const _reverse = "\x1b[7m"
 const _hidden = "\x1b[8m"
+
+exports._bright = _bright;
+exports._dim = _dim;
+exports._reset = _reset;
 
 
 let logfilename = "";
@@ -319,7 +340,7 @@ function clearLine(){
     process.stdout.cursorTo(0); 
 }
 
-function clearMultpleLines(num){
+function clearMultipleLines(num){
     for(var i = 0; i < num; i++){
         process.stdout.cursorTo(0,-1);
         process.stdout.clearLine(0);
@@ -396,8 +417,7 @@ async function listOptions(options, text){
     {
         name: "another thing",
         selected: false
-    }
-    ]
+    }]
 
     */
     var index = 0;
@@ -469,6 +489,12 @@ function displayListOptions(options, text, index = 0, key = "none"){
 }
 
 
+
+
+
+
+
+
 exports.spinner = spinner;
 exports.parseScrypty = parseScrypty;
 exports.findIfScrypty = findIfScrypty;
@@ -483,3 +509,4 @@ exports.logBoth = logBoth;
 exports.clearLine = clearLine;
 exports.getLogFile = getLogFile;
 exports.listOptions = listOptions;
+exports.colorText = colorText;
