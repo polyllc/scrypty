@@ -2,3 +2,5 @@ repositories/
 scryptyLogs/
 node_modules/
 package-lock.json
+src/compilers/
+http%3a%2f%2fwww.gtlib.gatech.edu%2fpub%2fcygwin%2f/

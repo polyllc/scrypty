@@ -320,7 +320,7 @@ function compileVSSolution(folder, file, programName){
         process.stdout.cursorTo(0,0);
         process.stdout.clearScreenDown();
 
-        exec("msbuild -t:restore" + sdk + " -p:RestorePackagesConfig=true " + pt + cp + " " + file, {maxBuffer: 1024 * 4000}, (error, stdout, stderr) => { //restore nuget pacakges (if needed)
+        exec("msbuild -t:restore" + sdk + " -p:RestorePackagesConfig=true " + pt + cp + " " + file, {maxBuffer: 1024 * 4000}, (error, stdout, stderr) => { //restore nuget packages (if needed)
             if (stderr) {
                // console.log(`${stderr}`);
                 s.log("restore stderr: " + stderr, 4);

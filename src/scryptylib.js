@@ -1,6 +1,8 @@
 const fs = require("fs");
 const os = require("os");
-const path = require("path")
+const path = require("path");
+const { exec } = require("child_process");
+
 
 
 const _black = "\x1b[30m";
@@ -490,12 +492,29 @@ function displayListOptions(options, text, index = 0, key = "none"){
 
 
 
+function checkIfExecFails(command){
+    let fails = true;
+    return new Promise((resolve) => {
+        exec(command, (error, stdout, stderr) => {
+            if(error){
+                fails = true;
+            }
+            else{
+                fails = false;
+            }
+            resolve(fails);
+        });
+    });
+}
 
-
-
+function getCppCompiler(){
+    return {"name":"g++", "testCommand":"g++ --help"}; //we'll update this later
+}
 
 
 exports.spinner = spinner;
+exports.checkIfExecFails = checkIfExecFails;
+exports.getCppCompiler = getCppCompiler;
 exports.parseScrypty = parseScrypty;
 exports.findIfScrypty = findIfScrypty;
 exports.verifyScrypty = verifyScrypty;

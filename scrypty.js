@@ -16,6 +16,7 @@ const minimist = require("minimist");
 
 const vsCompile = require("./src/vsCompile");
 const cmakeCompile = require("./src/cmakeCompile");
+const cppCompile = require("./src/cppCompile");
 //const execP = util.promisify(require('child_process').exec);
 
 const scryptyVersion = "v0.0.31";
@@ -394,7 +395,7 @@ async function findMethods(folder, programName, methods, allFiles) {
         methods.push("vs");
     }
 
-    let cpp = await findIfCpp(folder, programName, allFiles);
+    let cpp = await cppCompile.findIfCpp(folder, programName, allFiles);
     if(cpp){
         s.log("Can compile by G++...");
         methods.push("singleg++");
@@ -419,52 +420,19 @@ function findIfGradle(folder){
     return fs.existsSync(folder + "/build.gradle");
 }
 
-async function findIfCpp(folder, programName, allFiles){
-    //what we really hope, no one uses .cc or .cxx
-    let file;
-    //what to check:
-    //1) if there's a main/projectname/index.cpp file
-    //2) if a large proportion of the files are cpp (usually this means either a full on cpp project or most likely, compile by cmake or sln)
-    //3) if there's literally only one file and it's a .cpp file
-    let cppfiles = allFiles.filter((e) => {return e.endsWith(".cpp")});
-
-    if(fs.existsSync(folder + "\\main.cpp") || fs.existsSync(folder + ".cpp") || fs.existsSync(folder + "\\index.cpp")){
-        //probably a singlecpp, confirm later
-        s.log("findIfCpp: Found a main/programname/index.cpp");
-        file = 1;
-    }
-    if(cppfiles.length >= allFiles.length/2 && allFiles.length > 1){ //to prevent empty folders from compiling
-        //worth a shot, right?
-        s.log("findIfCpp: more cpp files than half of the total number of files");
-        file = 1;
-    }
-
-    if(fs.existsSync(folder + "\\main.cpp") || fs.existsSync(folder + "\\" + programName + ".cpp") || fs.existsSync(folder + "\\index.cpp")){
-        file = 2;
-        s.log("findIfCpp: found a Found a main/programname/index.cpp in programname subfolder");
-    }
-
-    if(cppfiles.length == 1){
-        file = cppfiles[0].substring(cppfiles[0].lastIndexOf("/")+1, cppfiles[0].length);
-    }
-    return new Promise((resolve) => {
-        s.log("findIfCpp: File to compile by (if there is one): " + file);
-        resolve(file);
-    });
-}
 
 
 async function compileByMethod(method, scrypty, folder, programName, file = new Map(), allFiles = []){
     switch(method){
         case "singleg++": 
             if(scrypty !== undefined){
-                compileSingleGPP(folder, folder + "\\" + s.getScryptyOS(scrypty).mainFile, programName); break;
+                cppCompile.compileSingleGPP(folder, folder + "\\" + s.getScryptyOS(scrypty).mainFile, programName); break;
             }
             else {
                 if(file.get("singleg++") == 2){
                     folder += "\\" + programName;
                 }
-                compileSingleGPP(folder, file.get("singleg++"), programName); break;
+                cppCompile.compileSingleGPP(folder, file.get("singleg++"), programName); break;
             }
         case "singlegcc": 
             if(scrypty !== undefined){
@@ -502,157 +470,6 @@ async function compileByMethod(method, scrypty, folder, programName, file = new 
     }
     console.log("Repository installed! Program is found in: " + folder + ". Run this program with `scrypty run " + programName + "`");
 }
-
-async function compileSingleGPP(folder, file, programName){
-    if(file == "none" || file === undefined || file == 2){ 
-        if(fs.existsSync(folder + "\\main.cpp") || fs.existsSync(folder + "\\" + programName + ".cpp") || fs.existsSync(folder + "\\index.cpp")){
-            let files = [];
-            if(fs.existsSync(folder + "\\main.cpp")){
-                files.push("main.cpp");
-            }
-            if(fs.existsSync(folder + "\\" + programName + ".cpp")){
-                files.push(programName + ".cpp");
-            }
-            if(fs.existsSync(folder + "\\index.cpp")){
-                files.push("index.cpp");
-            }
-            s.log(files + " exist of prenamed files", 2);
-            if(files.length > 1){
-                    console.log(colorText(_green, _bright + "Choose the .cpp file to compile:"));
-                    for(let i = 0; i < files.length; i++){
-                        console.log(colorText(_magenta, _bright + "[" + (i+1) + "]")  + " " + files[i]);
-                    }
-        
-                let r;
-        
-                let validNum = false;
-        
-                while(!validNum){
-                    r = prompt("Choose the .cpp file by typing in the number next to the file: ");
-    
-                    if(parseInt(r) || r == "0"){
-                        if(r > 0 && r <= files.length){
-                            file = files[r-1];
-                            validNum = true;
-                        }  
-                        else if(r == "0"){
-                            console.log(colorText(_yellow, "Skipping... (I guess you really want to see all of the .cpp files, do you)"));
-                            file = "none";
-                            s.log("Skipped common cpp files");
-                            validNum = true;
-                        }  
-                        else{
-                            console.log(colorText(_red, "Choose a valid option!"));
-                        }
-                    }
-                    else{
-                        console.log(colorText(_red, "Choose a valid option!!"));
-                    }
-                }
-            }
-            else{
-                file = files[0]; //i mean, it passed the first if, there HAS to be something there
-            }
-            
-        }
-    }
-    if(file == "none" || file === undefined || file == 2){ //if we still have no file selected
-        files = await getDirectories(__dirname + "\\" + programName);
-        files = files.filter((e) => { return e.endsWith(".cpp"); });
-        console.log(files);
-        for(let i = 0; i < files.length; i++){
-            files[i] = files[i].substring(files[i].lastIndexOf("/")+1, files[i].length);
-            files[i] = files[i].substring(files[i].lastIndexOf("\\")+1, files[i].length);
-        }
-        console.log(colorText(_green, _bright + "Choose the .cpp file to compile:"));
-            for(let i = 0; i < files.length; i++){
-                console.log(colorText(_magenta, _bright + "[" + (i+1) + "]")  + " " + files[i]);
-            }
-
-        let r;
-
-        let validNum = false;
-
-        while(!validNum){
-            r = prompt("Choose the .cpp file by typing in the number next to the file: ");
-
-            if(parseInt(r) || r == "0"){
-                if(r > 0 && r <= files.length){
-                    file = files[r-1];
-                    validNum = true;
-                }  
-                else{
-                    console.log(colorText(_red, "Choose a valid option! (you really need to choose an option, please of course)"));
-                }
-            }
-            else if(r == "exit"){
-                process.exit();
-            }
-            else{
-                console.log(colorText(_red, "Choose a valid option!!"));
-            }
-        }
-    }
-
-
-    let cppVer;
-    console.log(colorText(_magenta, _bright + "[1] ") + "C++20");
-    console.log(colorText(_magenta, _bright + "[2] ") + "C++17");
-    console.log(colorText(_magenta, _bright + "[3] ") + "C++14");
-    console.log(colorText(_magenta, _bright + "[4] ") + "C++11");
-    console.log(colorText(_magenta, _bright + "[5] ") + "C++03");
-
-    let validNum = false; //i hate it when local variables become global, probably should be using typescript?!?!!? nah whatever this'll never not work :)
-    r = "";
-
-    while(!validNum){
-
-        let r = prompt(colorText(_green, _bright + "Choose the C++ version to use (if unsure, try C++17, and if that doesn't work, go down the chain. You can try using C++20, but it's so new, some compilers might not support it): "));
-
-        if(parseInt(r) || r == "0"){
-            if(r > 0 && r <= 5){
-                switch(r){
-                    case "1": cppVer = "c++20"; break;
-                    case "2": cppVer = "c++17"; break;
-                    case "3": cppVer = "c++14"; break;
-                    case "4": cppVer = "c++11"; break;
-                    case "5": cppVer = "c++03"; break;
-                }
-                validNum = true;
-            }    
-            //no skipping! you need to select something
-            else{
-                console.log(colorText(_red, "Choose a valid option!"));
-            }
-        }
-        else{
-            console.log(colorText(_red, "Choose a valid option!"));
-        }
-    }
-    //why would anyone use anything prior to 03 it's not like with c people use c98 all the time, right? .....right? uh oh
-
-
-    console.log("Compiling file " + file);
-    s.log("Compiling file " + file + "... cppVer: " + cppVer);
-    let spinner = new s.spinner(100, colorText(_white, "Building", _bgGreen));
-    spinner.start();
-    exec("g++ --std=" + cppVer + " " + file + " -o " + file.substr(0, file.lastIndexOf(".")) + (os.platform() == "win32" ? ".exe" : ""), (error, stdout, stderr) => {
-        spinner.stop();
-        if (error) {
-            console.log(`error: ${error.message}`);
-            s.log(error, 4);
-            return;
-        }
-        if (stderr) {
-            console.log(`${stderr}`);
-            s.log(stderr, 4);
-           // return;
-        }
-        console.log(`${stdout}`);
-        s.log(stdout, 2);
-    });
-}
-
 
 function compileSingleGCC(folder, file){ //todo, test it
     console.log("Compiling file " + file + "...");
@@ -833,25 +650,12 @@ function displayScryptyInfo(){
 async function checkPrerequisitesPromises(){
     let promises = [];
     for(let i = 0; i < methodNames.length; i++){
-        promises.push(checkIfExecFails(methodCommands[i]));
+        promises.push(s.checkIfExecFails(methodCommands[i]));
     }   
     return Promise.allSettled(promises);
 }
 
-function checkIfExecFails(command){
-    let fails = true;
-    return new Promise((resolve) => {
-        exec(command, (error, stdout, stderr) => {
-            if(error){
-                fails = true;
-            }
-            else{
-                fails = false;
-            }
-            resolve(fails);
-        });
-    });
-}
+
 
 async function gitDownload(url, programName){
 

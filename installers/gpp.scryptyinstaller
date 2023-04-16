@@ -1,0 +1,24 @@
+{
+    "info":{
+        "windows":{
+            "name":"g++",
+            "source":"https://cygwin.com/",
+            "description":"Download G++ from Cygwin and MinGW",
+            "endFolder":"compilers/gpp/bin/"
+        }
+    },
+    "file":{
+        "windows":{
+            "primary":"https://cygwin.com/setup-x86_64.exe",
+            "mirrors":["https://cygwin.com/setup-x86_64.exe","https://polyllc.org/scrypty/gpp"]
+        },
+        "linux":{
+
+        }
+    },
+    "command":{
+        "windows":{
+            "commands":["${file_dir}\\setup-x86_64.exe --no-admin -I -n -q --download --no-verify -P \"gcc-g++\" -R ${working_dir}"]
+        }
+    }
+}
